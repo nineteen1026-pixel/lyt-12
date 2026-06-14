@@ -21,6 +21,7 @@ import { getVillagerById, getReputationLevel } from '../data/orders';
 import { getBuildingConfig } from '../data/buildings';
 import { ACHIEVEMENTS, getAchievementById } from '../data/achievements';
 import { CODEX_ENTRIES, getCodexEntryById } from '../data/codex';
+import { rollFish, rollArtifact, FISH_COOLDOWN, DIG_COOLDOWN } from '../data/exploration';
 
 export const useGameStore = defineStore('game', () => {
   const gameState = ref<GameState | null>(null);
@@ -485,6 +486,7 @@ export const useGameStore = defineStore('game', () => {
 
     if (selectedTool.value === 'water') {
       if (cropGrowth.value.waterPlot(x, y)) {
+        dayCropsWatered.value++;
         addNotification('浇水成功！作物会更快生长~', 'success');
         saveGame();
       } else {
@@ -728,11 +730,15 @@ export const useGameStore = defineStore('game', () => {
       }
       
       if (seasonUpdate.newDay) {
+        checkPerfectDay();
+        
         gameState.value.day = seasonUpdate.newDay;
         orders.value.setCurrentDay(seasonUpdate.newDay);
         if (statistics.value) {
           statistics.value.recordDayAdvanced();
         }
+        
+        onDayStart();
       }
       
       checkAchievements();
@@ -773,6 +779,7 @@ export const useGameStore = defineStore('game', () => {
       if (newOrders.length > 0) {
         addNotification(`今日有${newOrders.length}个新村民订单！`, 'info');
       }
+      dayOrdersTotal.value = orders.value.getActiveOrderCount();
       saveGame();
     }
 
@@ -790,6 +797,8 @@ export const useGameStore = defineStore('game', () => {
     if (result.success) {
       gameState.value.coins = shop.value.getCoins();
       gameState.value.reputation = orders.value.getReputation();
+      
+      dayOrdersCompleted.value++;
       
       if (statistics.value) {
         statistics.value.recordOrderCompleted(order?.tier || 'common');
@@ -950,6 +959,119 @@ export const useGameStore = defineStore('game', () => {
     showCodex.value = false;
   }
 
+  const lastFishTime = ref(0);
+  const lastDigTime = ref(0);
+
+  function tryFish(): { success: boolean; fishId?: string; fishName?: string; rarity?: string; coinValue?: number; message: string } {
+    if (!statistics.value || !codexSystem.value || !mapGrid.value) {
+      return { success: false, message: '系统未初始化' };
+    }
+
+    const now = Date.now();
+    if (now - lastFishTime.value < FISH_COOLDOWN) {
+      const remaining = Math.ceil((FISH_COOLDOWN - (now - lastFishTime.value)) / 1000);
+      return { success: false, message: `钓鱼冷却中，还需等待${remaining}秒` };
+    }
+
+    lastFishTime.value = now;
+    const currentSeason = mapGrid.value.getSeason();
+    const currentDay = mapGrid.value.getDay();
+    const dayBoost = Math.floor(currentDay / 5);
+
+    const fish = rollFish(currentSeason, dayBoost);
+    if (!fish) {
+      return { success: false, message: '当前季节没有鱼可钓' };
+    }
+
+    statistics.value.recordFishCaught(fish.id, 1);
+    codexSystem.value.discoverFish(fish.id, 1);
+
+    if (shop.value) {
+      shop.value.addCoins(fish.coinValue);
+      statistics.value.recordCoinsEarned(fish.coinValue);
+    }
+
+    checkAchievements();
+    addNotification(`🎣 钓到了${fish.name}！价值${fish.coinValue}金币`, 'success');
+    saveGame();
+
+    return { success: true, fishId: fish.id, fishName: fish.name, rarity: fish.rarity, coinValue: fish.coinValue, message: `钓到了${fish.name}！` };
+  }
+
+  function tryDig(): { success: boolean; artifactId?: string; artifactName?: string; rarity?: string; coinValue?: number; message: string } {
+    if (!statistics.value || !codexSystem.value || !mapGrid.value) {
+      return { success: false, message: '系统未初始化' };
+    }
+
+    const now = Date.now();
+    if (now - lastDigTime.value < DIG_COOLDOWN) {
+      const remaining = Math.ceil((DIG_COOLDOWN - (now - lastDigTime.value)) / 1000);
+      return { success: false, message: `挖掘冷却中，还需等待${remaining}秒` };
+    }
+
+    lastDigTime.value = now;
+    const currentDay = mapGrid.value.getDay();
+    const dayBoost = Math.floor(currentDay / 5);
+
+    const artifact = rollArtifact(currentDay, dayBoost);
+    if (!artifact) {
+      return { success: false, message: '还需要更多天数才能挖掘到文物' };
+    }
+
+    statistics.value.recordArtifactFound(artifact.id);
+    codexSystem.value.discoverArtifact(artifact.id);
+
+    if (shop.value) {
+      shop.value.addCoins(artifact.coinValue);
+      statistics.value.recordCoinsEarned(artifact.coinValue);
+    }
+
+    checkAchievements();
+    addNotification(`⛏️ 挖掘到${artifact.name}！价值${artifact.coinValue}金币`, 'success');
+    saveGame();
+
+    return { success: true, artifactId: artifact.id, artifactName: artifact.name, rarity: artifact.rarity, coinValue: artifact.coinValue, message: `挖掘到${artifact.name}！` };
+  }
+
+  const dayOrdersCompleted = ref(0);
+  const dayOrdersTotal = ref(0);
+  const dayCropsWatered = ref(0);
+  const dayTotalCrops = ref(0);
+
+  function checkPerfectDay() {
+    if (!statistics.value || !orders.value || !mapGrid.value || !cropGrowth.value) return;
+
+    const allOrdersCompleted = dayOrdersTotal.value === 0 || dayOrdersCompleted.value >= dayOrdersTotal.value;
+    const allCropsWatered = dayTotalCrops.value === 0 || dayCropsWatered.value >= dayTotalCrops.value;
+
+    if (allOrdersCompleted && allCropsWatered && (dayOrdersTotal.value > 0 || dayTotalCrops.value > 0)) {
+      statistics.value.recordPerfectDay();
+      addNotification('☀️ 完美一天！所有订单完成且所有作物已浇灌！', 'success');
+      checkAchievements();
+    }
+  }
+
+  function onDayStart() {
+    if (!orders.value || !mapGrid.value || !cropGrowth.value) return;
+
+    dayOrdersCompleted.value = 0;
+    dayOrdersTotal.value = orders.value.getActiveOrderCount();
+
+    const plots = mapGrid.value.getPlotGrid();
+    let plantedCount = 0;
+    let wateredCount = 0;
+    for (const row of plots) {
+      for (const plot of row) {
+        if (plot.crop) {
+          plantedCount++;
+          if (plot.state === 'watered') wateredCount++;
+        }
+      }
+    }
+    dayTotalCrops.value = plantedCount;
+    dayCropsWatered.value = wateredCount;
+  }
+
   return {
     gameState,
     mapGrid,
@@ -1032,6 +1154,14 @@ export const useGameStore = defineStore('game', () => {
     closeAchievementsModal,
     openCodexModal,
     closeCodexModal,
-    checkAchievements
+    checkAchievements,
+    tryFish,
+    tryDig,
+    lastFishTime,
+    lastDigTime,
+    dayOrdersCompleted,
+    dayOrdersTotal,
+    dayCropsWatered,
+    dayTotalCrops
   };
 });

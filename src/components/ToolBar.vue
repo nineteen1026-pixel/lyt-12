@@ -3,9 +3,42 @@ import { ref, computed } from 'vue';
 import { useGameStore } from '../game/stores/gameStore';
 import { getItem } from '../game/data/items';
 import { getCropConfig } from '../game/data/crops';
+import { FISH_COOLDOWN, DIG_COOLDOWN } from '../game/data/exploration';
 
 const gameStore = useGameStore();
 const showSeedSelector = ref(false);
+const fishCooldown = ref(0);
+const digCooldown = ref(0);
+let cooldownTimer: number | null = null;
+
+const startCooldownTimer = () => {
+  if (cooldownTimer) return;
+  cooldownTimer = window.setInterval(() => {
+    const now = Date.now();
+    const fishRemaining = Math.max(0, FISH_COOLDOWN - (now - gameStore.lastFishTime));
+    const digRemaining = Math.max(0, DIG_COOLDOWN - (now - gameStore.lastDigTime));
+    fishCooldown.value = Math.ceil(fishRemaining / 1000);
+    digCooldown.value = Math.ceil(digRemaining / 1000);
+    if (fishRemaining <= 0 && digRemaining <= 0 && cooldownTimer) {
+      clearInterval(cooldownTimer);
+      cooldownTimer = null;
+    }
+  }, 1000);
+};
+
+const handleFish = () => {
+  const result = gameStore.tryFish();
+  if (!result.success) {
+    startCooldownTimer();
+  }
+};
+
+const handleDig = () => {
+  const result = gameStore.tryDig();
+  if (!result.success) {
+    startCooldownTimer();
+  }
+};
 
 const tools = computed(() => [
   { id: 'hoe' as const, icon: '⛏️', name: '锄头', desc: '翻地' },
@@ -101,6 +134,62 @@ const toggleBuildingsPanel = () => {
     >
       <span class="text-2xl">🏗️</span>
       <span class="font-pixel text-[8px] text-farm-wood-dark mt-1">建造</span>
+    </div>
+
+    <div class="w-px h-12 bg-farm-wood-dark mx-2"></div>
+
+    <div 
+      class="tool-btn flex flex-col items-center justify-center w-16 h-16 bg-farm-ui-dark border-3 border-farm-wood-dark cursor-pointer transition-all hover:bg-farm-gold hover:scale-105 active:scale-95 relative"
+      :class="{ 'opacity-50 cursor-wait': fishCooldown > 0 }"
+      @click="handleFish"
+    >
+      <span class="text-2xl">🎣</span>
+      <span class="font-pixel text-[8px] text-farm-wood-dark mt-1">钓鱼</span>
+      <span v-if="fishCooldown > 0" class="font-pixel text-[7px] text-red-500 absolute bottom-0.5">
+        {{ fishCooldown }}s
+      </span>
+    </div>
+    
+    <div 
+      class="tool-btn flex flex-col items-center justify-center w-16 h-16 bg-farm-ui-dark border-3 border-farm-wood-dark cursor-pointer transition-all hover:bg-farm-gold hover:scale-105 active:scale-95 relative"
+      :class="{ 'opacity-50 cursor-wait': digCooldown > 0 }"
+      @click="handleDig"
+    >
+      <span class="text-2xl">⛏️</span>
+      <span class="font-pixel text-[8px] text-farm-wood-dark mt-1">挖掘</span>
+      <span v-if="digCooldown > 0" class="font-pixel text-[7px] text-red-500 absolute bottom-0.5">
+        {{ digCooldown }}s
+      </span>
+    </div>
+
+    <div class="w-px h-12 bg-farm-wood-dark mx-2"></div>
+
+    <div 
+      class="tool-btn flex flex-col items-center justify-center w-16 h-16 bg-farm-ui-dark border-3 border-farm-wood-dark cursor-pointer transition-all hover:bg-farm-gold hover:scale-105 active:scale-95 relative"
+      @click="gameStore.showAchievements = true"
+    >
+      <span class="text-2xl">🏆</span>
+      <span class="font-pixel text-[8px] text-farm-wood-dark mt-1">成就</span>
+      <span 
+        v-if="gameStore.unlockedAchievementCount > 0"
+        class="absolute -top-1 -right-1 w-5 h-5 bg-yellow-500 text-white font-pixel text-[10px] rounded-full flex items-center justify-center border-2 border-farm-wood-dark"
+      >
+        {{ gameStore.unlockedAchievementCount }}
+      </span>
+    </div>
+    
+    <div 
+      class="tool-btn flex flex-col items-center justify-center w-16 h-16 bg-farm-ui-dark border-3 border-farm-wood-dark cursor-pointer transition-all hover:bg-farm-gold hover:scale-105 active:scale-95 relative"
+      @click="gameStore.showCodex = true"
+    >
+      <span class="text-2xl">📖</span>
+      <span class="font-pixel text-[8px] text-farm-wood-dark mt-1">图鉴</span>
+      <span 
+        v-if="gameStore.discoveredCodexCount > 0"
+        class="absolute -top-1 -right-1 w-5 h-5 bg-purple-500 text-white font-pixel text-[10px] rounded-full flex items-center justify-center border-2 border-farm-wood-dark"
+      >
+        {{ gameStore.discoveredCodexCount }}
+      </span>
     </div>
 
     <div 

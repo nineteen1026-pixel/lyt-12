@@ -8,6 +8,8 @@ import InventoryModal from './components/InventoryModal.vue';
 import ShopModal from './components/ShopModal.vue';
 import OrdersModal from './components/OrdersModal.vue';
 import BuildingsModal from './components/BuildingsModal.vue';
+import AchievementsModal from './components/AchievementsModal.vue';
+import CodexModal from './components/CodexModal.vue';
 
 const gameStore = useGameStore();
 const isLoading = ref(true);
@@ -40,6 +42,8 @@ onMounted(async () => {
       <ShopModal />
       <OrdersModal />
       <BuildingsModal />
+      <AchievementsModal />
+      <CodexModal />
       
       <div class="fixed top-4 right-4 flex flex-col gap-2 z-40">
         <transition-group name="notification">
@@ -62,6 +66,7 @@ onMounted(async () => {
         <p>💡 提示：先选锄头翻地 → 选手播种 → 浇水加速生长 → 成熟后收获</p>
         <p class="mt-1">🏗️ 建造：点击"建造"按钮选择建筑 → 点击地块放置 → 建造后自动生效</p>
         <p class="mt-1">📦 建造谷仓扩展容量，建造洒水器自动浇水，建造温室突破季节限制！</p>
+        <p class="mt-1">🏆 成就：完成各种挑战解锁成就奖励 | 📖 图鉴：收集图鉴条目发现更多内容</p>
       </div>
     </template>
   </div>
