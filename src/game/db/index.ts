@@ -1,7 +1,10 @@
 import { openDB, IDBPDatabase } from 'idb';
 import { DB_CONFIG, STORE_CONFIGS, INITIAL_GAME_STATE, INITIAL_REPUTATION, type DBStores } from './schema';
-import type { GameState, Plot, Animal, InventoryItem, Order, Building } from '../types/game';
+import type { GameState, Plot, Animal, InventoryItem, Order, Building, GameStats, AchievementProgress, CodexEntry } from '../types/game';
 import { GRID_WIDTH, GRID_HEIGHT, INITIAL_UNLOCKED } from '../types/game';
+import { INITIAL_STATS } from '../modules/Statistics';
+import { ACHIEVEMENTS } from '../data/achievements';
+import { CODEX_ENTRIES } from '../data/codex';
 
 class GameDatabase {
   private db: IDBPDatabase<DBStores> | null = null;
@@ -178,7 +181,71 @@ class GameDatabase {
     await db.delete('buildings', buildingId);
   }
 
-  async initializeNewGame(): Promise<{ state: GameState; plots: Plot[]; animals: Animal[]; inventory: InventoryItem[]; orders: Order[]; buildings: Building[] }> {
+  async saveStats(stats: GameStats): Promise<void> {
+    const db = this.ensureDB();
+    const clone = JSON.parse(JSON.stringify(stats));
+    clone.id = 'main';
+    await db.put('stats', clone);
+  }
+
+  async getStats(): Promise<GameStats | undefined> {
+    const db = this.ensureDB();
+    try {
+      return await db.get('stats', 'main');
+    } catch (e) {
+      return undefined;
+    }
+  }
+
+  async saveAllAchievements(achievements: AchievementProgress[]): Promise<void> {
+    const db = this.ensureDB();
+    const clones = JSON.parse(JSON.stringify(achievements));
+    const tx = db.transaction('achievements', 'readwrite');
+    await Promise.all([
+      ...clones.map((a: AchievementProgress) => tx.store.put(a)),
+      tx.done
+    ]);
+  }
+
+  async getAllAchievements(): Promise<AchievementProgress[]> {
+    const db = this.ensureDB();
+    try {
+      return await db.getAll('achievements');
+    } catch (e) {
+      return [];
+    }
+  }
+
+  async saveAllCodexEntries(entries: CodexEntry[]): Promise<void> {
+    const db = this.ensureDB();
+    const clones = JSON.parse(JSON.stringify(entries));
+    const tx = db.transaction('codex', 'readwrite');
+    await Promise.all([
+      ...clones.map((e: CodexEntry) => tx.store.put(e)),
+      tx.done
+    ]);
+  }
+
+  async getAllCodexEntries(): Promise<CodexEntry[]> {
+    const db = this.ensureDB();
+    try {
+      return await db.getAll('codex');
+    } catch (e) {
+      return [];
+    }
+  }
+
+  async initializeNewGame(): Promise<{
+    state: GameState;
+    plots: Plot[];
+    animals: Animal[];
+    inventory: InventoryItem[];
+    orders: Order[];
+    buildings: Building[];
+    stats: GameStats;
+    achievements: AchievementProgress[];
+    codex: CodexEntry[];
+  }> {
     const now = Date.now();
     const state: GameState = {
       ...INITIAL_GAME_STATE,
@@ -224,6 +291,19 @@ class GameDatabase {
     ];
     const orders: Order[] = [];
     const buildings: Building[] = [];
+    
+    const stats: GameStats = {
+      ...INITIAL_STATS,
+      id: 'main'
+    } as GameStats;
+
+    const achievements: AchievementProgress[] = ACHIEVEMENTS.map(a => ({
+      achievementId: a.id,
+      unlocked: false,
+      progress: 0
+    }));
+
+    const codex: CodexEntry[] = CODEX_ENTRIES.map(e => ({ ...e }));
 
     await this.saveGameState(state);
     await this.saveAllPlots(plots);
@@ -231,11 +311,24 @@ class GameDatabase {
     await this.saveAllInventory(inventory);
     await this.saveAllOrders(orders);
     await this.saveAllBuildings(buildings);
+    await this.saveStats(stats);
+    await this.saveAllAchievements(achievements);
+    await this.saveAllCodexEntries(codex);
 
-    return { state, plots, animals, inventory, orders, buildings };
+    return { state, plots, animals, inventory, orders, buildings, stats, achievements, codex };
   }
 
-  async loadGame(): Promise<{ state: GameState; plots: Plot[]; animals: Animal[]; inventory: InventoryItem[]; orders: Order[]; buildings: Building[] } | null> {
+  async loadGame(): Promise<{
+    state: GameState;
+    plots: Plot[];
+    animals: Animal[];
+    inventory: InventoryItem[];
+    orders: Order[];
+    buildings: Building[];
+    stats?: GameStats;
+    achievements?: AchievementProgress[];
+    codex?: CodexEntry[];
+  } | null> {
     const state = await this.getGameState();
     if (!state) {
       return null;
@@ -269,17 +362,41 @@ class GameDatabase {
       orders = [];
     }
     const buildings = await this.getAllBuildings();
+    
+    const stats = await this.getStats();
+    const achievements = await this.getAllAchievements();
+    const codex = await this.getAllCodexEntries();
 
-    return { state, plots, animals, inventory, orders, buildings };
+    return { state, plots, animals, inventory, orders, buildings, stats, achievements, codex };
   }
 
-  async saveCompleteGame(state: GameState, plots: Plot[], animals: Animal[], inventory: InventoryItem[], orders: Order[], buildings: Building[]): Promise<void> {
+  async saveCompleteGame(
+    state: GameState,
+    plots: Plot[],
+    animals: Animal[],
+    inventory: InventoryItem[],
+    orders: Order[],
+    buildings: Building[],
+    stats?: GameStats,
+    achievements?: AchievementProgress[],
+    codex?: CodexEntry[]
+  ): Promise<void> {
     await this.saveGameState(state);
     await this.saveAllPlots(plots);
     await this.saveAllAnimals(animals);
     await this.saveAllInventory(inventory);
     await this.saveAllOrders(orders);
     await this.saveAllBuildings(buildings);
+    
+    if (stats) {
+      await this.saveStats(stats);
+    }
+    if (achievements) {
+      await this.saveAllAchievements(achievements);
+    }
+    if (codex) {
+      await this.saveAllCodexEntries(codex);
+    }
   }
 
   async clearAll(): Promise<void> {

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed, toRaw } from 'vue';
-import type { GameState, Plot, Animal, InventoryItem, ToolType, Season, WeatherType, WeatherState, Order, Building, BuildingType, BuildingConfig } from '../types/game';
+import type { GameState, Plot, Animal, InventoryItem, ToolType, Season, WeatherType, WeatherState, Order, Building, BuildingType, BuildingConfig, GameStats, AchievementProgress, CodexEntry } from '../types/game';
 import { MapGrid } from '../modules/MapGrid';
 import { CropGrowth } from '../modules/CropGrowth';
 import { Livestock } from '../modules/Livestock';
@@ -10,11 +10,17 @@ import { Weather } from '../modules/Weather';
 import type { WeatherEffects } from '../modules/Weather';
 import { Orders } from '../modules/Orders';
 import { Buildings } from '../modules/Buildings';
+import { Statistics } from '../modules/Statistics';
+import { AchievementSystem, type AchievementUnlockResult } from '../modules/Achievements';
+import { CodexSystem, type DiscoveryResult } from '../modules/Codex';
+import { shareCardGenerator } from '../modules/ShareCard';
 import { gameDB } from '../db';
 import { getItem } from '../data/items';
 import { getCropConfig } from '../data/crops';
 import { getVillagerById, getReputationLevel } from '../data/orders';
 import { getBuildingConfig } from '../data/buildings';
+import { ACHIEVEMENTS, getAchievementById } from '../data/achievements';
+import { CODEX_ENTRIES, getCodexEntryById } from '../data/codex';
 
 export const useGameStore = defineStore('game', () => {
   const gameState = ref<GameState | null>(null);
@@ -26,6 +32,9 @@ export const useGameStore = defineStore('game', () => {
   const weather = ref<Weather | null>(null);
   const orders = ref<Orders | null>(null);
   const buildings = ref<Buildings | null>(null);
+  const statistics = ref<Statistics | null>(null);
+  const achievementSystem = ref<AchievementSystem | null>(null);
+  const codexSystem = ref<CodexSystem | null>(null);
   const selectedTool = ref<ToolType>(null);
   const selectedSeed = ref<string | null>(null);
   const selectedBuilding = ref<BuildingType | null>(null);
@@ -54,6 +63,20 @@ export const useGameStore = defineStore('game', () => {
   const buildingCount = computed(() => buildingList.value.length);
   const hasBarn = computed(() => buildings.value?.hasBarn() ?? false);
   const barnCapacityBonus = computed(() => buildings.value?.getBarnCapacityBonus() ?? 0);
+
+  const stats = computed<GameStats | null>(() => statistics.value?.getStats() ?? null);
+  const achievementProgress = computed(() => achievementSystem.value?.getAllProgress() ?? {});
+  const unlockedAchievementCount = computed(() => achievementSystem.value?.getUnlockedCount() ?? 0);
+  const totalAchievementCount = computed(() => achievementSystem.value?.getTotalCount() ?? 0);
+  const codexEntries = computed(() => codexSystem.value?.getAllEntries() ?? []);
+  const discoveredCodexCount = computed(() => codexSystem.value?.getDiscoveredCount() ?? 0);
+  const totalCodexCount = computed(() => codexSystem.value?.getTotalCount() ?? 0);
+  const codexCompletionPercentage = computed(() => codexSystem.value?.getCompletionPercentage() ?? 0);
+  
+  const showAchievements = ref(false);
+  const showCodex = ref(false);
+  const showShareCard = ref(false);
+  const currentShareCardDataUrl = ref<string | null>(null);
 
   let notificationId = 0;
 
@@ -106,6 +129,25 @@ export const useGameStore = defineStore('game', () => {
         savedGame.state.season,
         savedGame.state.day
       );
+
+      statistics.value = new Statistics(savedGame.stats);
+      achievementSystem.value = new AchievementSystem(
+        savedGame.achievements?.reduce((acc, a) => {
+          acc[a.achievementId] = a;
+          return acc;
+        }, {} as Record<string, AchievementProgress>)
+      );
+      codexSystem.value = new CodexSystem(
+        savedGame.codex?.reduce((acc, e) => {
+          acc[e.id] = e;
+          return acc;
+        }, {} as Record<string, CodexEntry>)
+      );
+
+      achievementSystem.value.subscribe(handleAchievementUnlocked);
+      codexSystem.value.subscribe(handleCodexDiscovered);
+
+      statistics.value.recordPlotsUnlocked(mapGrid.value.getUnlockedCount());
 
       const now = Date.now();
       const offlineMs = now - savedGame.state.lastSaveTime;
@@ -235,6 +277,28 @@ export const useGameStore = defineStore('game', () => {
         newGame.state.day
       );
 
+      statistics.value = new Statistics(newGame.stats);
+      achievementSystem.value = new AchievementSystem(
+        newGame.achievements?.reduce((acc, a) => {
+          acc[a.achievementId] = a;
+          return acc;
+        }, {} as Record<string, AchievementProgress>)
+      );
+      codexSystem.value = new CodexSystem(
+        newGame.codex?.reduce((acc, e) => {
+          acc[e.id] = e;
+          return acc;
+        }, {} as Record<string, CodexEntry>)
+      );
+
+      achievementSystem.value.subscribe(handleAchievementUnlocked);
+      codexSystem.value.subscribe(handleCodexDiscovered);
+
+      statistics.value.recordPlotsUnlocked(mapGrid.value.getUnlockedCount());
+      
+      codexSystem.value.discoverItem('turnip_seed', 5);
+      codexSystem.value.discoverItem('potato_seed', 3);
+
       const { newOrders } = orders.value.refreshOrders();
       gameState.value.lastOrderRefreshDay = newGame.state.day;
       gameState.value.reputation = orders.value.getReputation();
@@ -246,6 +310,44 @@ export const useGameStore = defineStore('game', () => {
     }
 
     isInitialized.value = true;
+  }
+
+  function handleAchievementUnlocked(result: AchievementUnlockResult) {
+    const { achievement, reward } = result;
+    let msg = `🏆 成就解锁：${achievement.name}！`;
+    if (reward.coins) msg += ` +${reward.coins}金币`;
+    if (reward.reputation) msg += ` +${reward.reputation}信誉`;
+    if (reward.title) msg += ` [称号: ${reward.title}]`;
+    addNotification(msg, 'success');
+    
+    if (reward.coins && shop.value) {
+      shop.value.addCoins(reward.coins);
+      gameState.value!.coins = shop.value.getCoins();
+    }
+    if (reward.reputation && orders.value) {
+      orders.value.addReputation(reward.reputation);
+      gameState.value!.reputation = orders.value.getReputation();
+    }
+  }
+
+  function handleCodexDiscovered(result: DiscoveryResult) {
+    if (result.isNew) {
+      addNotification(`📖 图鉴发现：${result.entry.name}！`, 'info');
+    }
+  }
+
+  function checkAchievements() {
+    if (!achievementSystem.value || !statistics.value || !codexSystem.value) return;
+    
+    const codexCompletion = codexSystem.value.getCompletionPercentage();
+    const newlyUnlocked = achievementSystem.value.checkAchievements(
+      statistics.value.getStats(),
+      codexCompletion
+    );
+    
+    for (const result of newlyUnlocked) {
+      handleAchievementUnlocked(result);
+    }
   }
 
   function notifyWeatherEffects(effects: WeatherEffects, isOffline: boolean = false) {
@@ -272,7 +374,7 @@ export const useGameStore = defineStore('game', () => {
   }
 
   async function saveGame() {
-    if (!gameState.value || !mapGrid.value || !livestock.value || !inventory.value || !shop.value || !weather.value || !orders.value || !buildings.value) {
+    if (!gameState.value || !mapGrid.value || !livestock.value || !inventory.value || !shop.value || !weather.value || !orders.value || !buildings.value || !statistics.value || !achievementSystem.value || !codexSystem.value) {
       return;
     }
 
@@ -289,6 +391,9 @@ export const useGameStore = defineStore('game', () => {
     const rawInventory = JSON.parse(JSON.stringify(toRaw(inventory.value.getInventoryItems())));
     const rawOrders = JSON.parse(JSON.stringify(toRaw(orders.value.getOrders())));
     const rawBuildings = JSON.parse(JSON.stringify(toRaw(buildings.value.getBuildings())));
+    const rawStats = JSON.parse(JSON.stringify(toRaw(statistics.value.getStats())));
+    const rawAchievements = JSON.parse(JSON.stringify(toRaw(Object.values(achievementSystem.value.getAllProgress()))));
+    const rawCodex = JSON.parse(JSON.stringify(toRaw(codexSystem.value.getAllEntries())));
 
     await gameDB.saveCompleteGame(
       rawState,
@@ -296,7 +401,10 @@ export const useGameStore = defineStore('game', () => {
       rawAnimals,
       rawInventory,
       rawOrders,
-      rawBuildings
+      rawBuildings,
+      rawStats,
+      rawAchievements,
+      rawCodex
     );
   }
 
@@ -328,6 +436,18 @@ export const useGameStore = defineStore('game', () => {
       if (result.success) {
         const config = getBuildingConfig(selectedBuilding.value);
         gameState.value.coins = shop.value.getCoins();
+        
+        if (statistics.value) {
+          statistics.value.recordBuildingBuilt(selectedBuilding.value);
+          if (config) {
+            statistics.value.recordCoinsSpent(config.price);
+          }
+        }
+        if (codexSystem.value) {
+          codexSystem.value.discoverBuilding(selectedBuilding.value);
+        }
+        checkAchievements();
+        
         addNotification(`建造${config?.name}成功！`, 'success');
         saveGame();
       } else {
@@ -379,6 +499,16 @@ export const useGameStore = defineStore('game', () => {
         if (result) {
           inventory.value.addItem(result.itemId, result.quantity);
           const item = getItem(result.itemId);
+          
+          if (statistics.value) {
+            statistics.value.recordCropHarvested(plot.crop.type, result.quantity);
+          }
+          if (codexSystem.value) {
+            codexSystem.value.discoverCrop(plot.crop.type, result.quantity);
+            codexSystem.value.discoverItem(result.itemId, result.quantity);
+          }
+          checkAchievements();
+          
           addNotification(`收获了${result.quantity}个${item?.name}！`, 'success');
           saveGame();
         }
@@ -390,6 +520,15 @@ export const useGameStore = defineStore('game', () => {
         if (inventory.value.hasItem(seedItemId, 1)) {
           if (cropGrowth.value.plantSeed(x, y, selectedSeed.value, currentSeason)) {
             inventory.value.removeItem(seedItemId, 1);
+            
+            if (statistics.value) {
+              statistics.value.recordSeedPlanted(selectedSeed.value, 1);
+            }
+            if (codexSystem.value) {
+              codexSystem.value.discoverCrop(selectedSeed.value, 0);
+            }
+            checkAchievements();
+            
             addNotification('播种成功！', 'success');
             saveGame();
           } else {
@@ -433,6 +572,15 @@ export const useGameStore = defineStore('game', () => {
     if (result) {
       inventory.value.addItem(result.itemId, result.quantity);
       const item = getItem(result.itemId);
+      
+      if (statistics.value) {
+        statistics.value.recordProductCollected(result.itemId, result.quantity);
+      }
+      if (codexSystem.value) {
+        codexSystem.value.discoverItem(result.itemId, result.quantity);
+      }
+      checkAchievements();
+      
       addNotification(`收集了${result.quantity}个${item?.name}！`, 'success');
       saveGame();
     } else {
@@ -448,10 +596,27 @@ export const useGameStore = defineStore('game', () => {
       return { success: false, message: '商店未初始化' };
     }
 
+    const item = getItem(itemId);
+    const totalCost = item ? item.price * quantity : 0;
     const result = shop.value.buyItem(itemId, quantity);
     if (result.success) {
       gameState.value.coins = shop.value.getCoins();
-      const item = getItem(itemId);
+      
+      if (statistics.value && totalCost > 0) {
+        statistics.value.recordCoinsSpent(totalCost);
+        statistics.value.recordItemsBought(quantity);
+      }
+      if (codexSystem.value) {
+        codexSystem.value.discoverItem(itemId, quantity);
+      }
+      
+      const itemData = getItem(itemId);
+      if (itemData?.type === 'animal' && statistics.value) {
+        statistics.value.recordAnimalBought(itemId, quantity);
+        codexSystem.value?.discoverAnimal(itemId, quantity);
+      }
+      checkAchievements();
+      
       addNotification(`购买了${quantity}个${item?.name}！`, 'success');
       saveGame();
     } else {
@@ -469,6 +634,13 @@ export const useGameStore = defineStore('game', () => {
     if (result.success && result.earned) {
       gameState.value.coins = shop.value.getCoins();
       const item = getItem(itemId);
+      
+      if (statistics.value) {
+        statistics.value.recordCoinsEarned(result.earned);
+        statistics.value.recordItemsSold(quantity);
+      }
+      checkAchievements();
+      
       addNotification(`出售了${quantity}个${item?.name}，获得${result.earned}金币！`, 'success');
       saveGame();
     } else {
@@ -485,6 +657,13 @@ export const useGameStore = defineStore('game', () => {
     const result = shop.value.sellAllItems();
     if (result.success) {
       gameState.value.coins = shop.value.getCoins();
+      
+      if (statistics.value) {
+        statistics.value.recordCoinsEarned(result.totalEarned);
+        statistics.value.recordItemsSold(result.sold.reduce((sum, s) => sum + s.quantity, 0));
+      }
+      checkAchievements();
+      
       addNotification(`一键出售完成！获得${result.totalEarned}金币！`, 'success');
       saveGame();
     } else {
@@ -501,6 +680,16 @@ export const useGameStore = defineStore('game', () => {
     const result = shop.value.expandPlot();
     if (result.success) {
       gameState.value.coins = shop.value.getCoins();
+      
+      if (statistics.value && mapGrid.value) {
+        statistics.value.recordPlotsUnlocked(mapGrid.value.getUnlockedCount());
+        const price = shop.value.getExpandPlotPrice();
+        if (price > 0) {
+          statistics.value.recordCoinsSpent(price);
+        }
+      }
+      checkAchievements();
+      
       addNotification(`解锁了新地块！`, 'success');
       saveGame();
     } else {
@@ -509,9 +698,13 @@ export const useGameStore = defineStore('game', () => {
     return result;
   }
 
-  function updateGame(time: number) {
+  function updateGame(time: number, deltaTime: number = 0) {
     if (!mapGrid.value || !cropGrowth.value || !livestock.value || !weather.value || !orders.value || !gameState.value || !shop.value || !inventory.value) {
       return;
+    }
+
+    if (statistics.value && deltaTime > 0) {
+      statistics.value.recordPlayTime(deltaTime);
     }
 
     const spoiledItems = inventory.value.processSpoilage(time);
@@ -529,10 +722,20 @@ export const useGameStore = defineStore('game', () => {
       orders.value.setCurrentSeason(seasonUpdate.newSeason!);
       const newForecast = weather.value.generateForecast(3);
       weather.value.getState().forecast = newForecast;
+      
+      if (statistics.value && seasonUpdate.newSeason) {
+        statistics.value.recordSeasonChanged(seasonUpdate.newSeason);
+      }
+      
       if (seasonUpdate.newDay) {
         gameState.value.day = seasonUpdate.newDay;
         orders.value.setCurrentDay(seasonUpdate.newDay);
+        if (statistics.value) {
+          statistics.value.recordDayAdvanced();
+        }
       }
+      
+      checkAchievements();
     }
 
     const weatherUpdate = weather.value.advanceDay(time);
@@ -540,6 +743,10 @@ export const useGameStore = defineStore('game', () => {
       addNotification(`今日天气：${weather.value.getWeatherName(weatherUpdate.newWeather)}！`, 'info');
       const effects = weather.value.applyWeatherEffects(mapGrid.value.getPlotGrid(), time);
       notifyWeatherEffects(effects, false);
+      
+      if (statistics.value && weatherUpdate.newWeather === 'stormy') {
+        statistics.value.recordStormOccurred();
+      }
     }
 
     const expiredOrders = orders.value.checkAndProcessExpiredOrders();
@@ -578,10 +785,30 @@ export const useGameStore = defineStore('game', () => {
       return { success: false, message: '系统未初始化' };
     }
 
+    const order = orders.value.getOrderById(orderId);
     const result = orders.value.submitOrder(orderId);
     if (result.success) {
       gameState.value.coins = shop.value.getCoins();
       gameState.value.reputation = orders.value.getReputation();
+      
+      if (statistics.value) {
+        statistics.value.recordOrderCompleted(order?.tier || 'common');
+        if (result.coins) {
+          statistics.value.recordCoinsEarned(result.coins);
+        }
+        if (result.rareSeedId && result.rareSeedQuantity) {
+          statistics.value.recordRareSeedFound(result.rareSeedQuantity);
+        }
+        const repLevel = getReputationLevel(gameState.value.reputation.score);
+        statistics.value.recordReputationLevelUp(repLevel.level);
+      }
+      if (codexSystem.value && order) {
+        codexSystem.value.discoverVillager(order.villagerId);
+        if (result.rareSeedId) {
+          codexSystem.value.discoverItem(result.rareSeedId, result.rareSeedQuantity || 1);
+        }
+      }
+      checkAchievements();
       
       let msg = `订单完成！获得${result.coins}金币，+${result.reputation}信誉`;
       if (result.rareSeedId && result.rareSeedQuantity) {
@@ -671,6 +898,58 @@ export const useGameStore = defineStore('game', () => {
     return names[s];
   }
 
+  function generateAchievementCard(achievementId: string): string | null {
+    const achievement = getAchievementById(achievementId);
+    if (!achievement || !achievementSystem.value || !statistics.value) return null;
+    
+    const progress = achievementSystem.value.getAchievementProgress(
+      achievementId,
+      statistics.value.getStats(),
+      codexSystem.value?.getCompletionPercentage()
+    );
+    
+    return shareCardGenerator.generateAchievementCard(achievement, progress);
+  }
+
+  function generateCodexCard(entryId: string): string | null {
+    const entry = getCodexEntryById(entryId);
+    if (!entry || !codexSystem.value) return null;
+    
+    const discoveredEntry = codexSystem.value.getEntry(entryId);
+    if (!discoveredEntry || !discoveredEntry.discovered) return null;
+    
+    return shareCardGenerator.generateCodexCard(discoveredEntry);
+  }
+
+  function generateStatsCard(): string | null {
+    if (!statistics.value) return null;
+    return shareCardGenerator.generateStatsCard(statistics.value.getStats());
+  }
+
+  function downloadShareCard(dataUrl: string, filename: string) {
+    shareCardGenerator.downloadCard(dataUrl, filename);
+  }
+
+  async function shareCard(dataUrl: string, title: string, text: string): Promise<boolean> {
+    return await shareCardGenerator.shareCard(dataUrl, title, text);
+  }
+
+  function openAchievementsModal() {
+    showAchievements.value = true;
+  }
+
+  function closeAchievementsModal() {
+    showAchievements.value = false;
+  }
+
+  function openCodexModal() {
+    showCodex.value = true;
+  }
+
+  function closeCodexModal() {
+    showCodex.value = false;
+  }
+
   return {
     gameState,
     mapGrid,
@@ -681,6 +960,9 @@ export const useGameStore = defineStore('game', () => {
     weather,
     orders,
     buildings,
+    statistics,
+    achievementSystem,
+    codexSystem,
     selectedTool,
     selectedSeed,
     selectedBuilding,
@@ -688,6 +970,10 @@ export const useGameStore = defineStore('game', () => {
     showShop,
     showOrders,
     showBuildings,
+    showAchievements,
+    showCodex,
+    showShareCard,
+    currentShareCardDataUrl,
     isInitialized,
     notifications,
     coins,
@@ -708,6 +994,14 @@ export const useGameStore = defineStore('game', () => {
     buildingCount,
     hasBarn,
     barnCapacityBonus,
+    stats,
+    achievementProgress,
+    unlockedAchievementCount,
+    totalAchievementCount,
+    codexEntries,
+    discoveredCodexCount,
+    totalCodexCount,
+    codexCompletionPercentage,
     initGame,
     saveGame,
     useTool,
@@ -728,6 +1022,16 @@ export const useGameStore = defineStore('game', () => {
     demolishBuilding,
     canPlaceBuilding,
     getBuyableBuildings,
-    getBuildingAtPlot
+    getBuildingAtPlot,
+    generateAchievementCard,
+    generateCodexCard,
+    generateStatsCard,
+    downloadShareCard,
+    shareCard,
+    openAchievementsModal,
+    closeAchievementsModal,
+    openCodexModal,
+    closeCodexModal,
+    checkAchievements
   };
 });
