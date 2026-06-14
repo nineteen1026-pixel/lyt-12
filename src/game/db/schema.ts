@@ -1,8 +1,8 @@
-import type { GameState, Plot, Animal, InventoryItem } from '../types/game';
+import type { GameState, Plot, Animal, InventoryItem, Order, ReputationState } from '../types/game';
 
 export const DB_CONFIG = {
   name: 'PixelFarmDB',
-  version: 1
+  version: 2
 };
 
 export interface DBStores {
@@ -10,6 +10,7 @@ export interface DBStores {
   plots: Plot;
   animals: Animal;
   inventory: InventoryItem;
+  orders: Order;
 }
 
 export const STORE_CONFIGS = [
@@ -28,8 +29,23 @@ export const STORE_CONFIGS = [
   {
     name: 'inventory',
     keyPath: 'itemId'
+  },
+  {
+    name: 'orders',
+    keyPath: 'id',
+    indexes: [
+      { name: 'status', keyPath: 'status' }
+    ]
   }
 ];
+
+export const INITIAL_REPUTATION: ReputationState = {
+  score: 0,
+  level: 1,
+  completedOrders: 0,
+  failedOrders: 0,
+  rareSeedDropBoost: 0
+};
 
 export const INITIAL_GAME_STATE: GameState = {
   id: 'main',
@@ -43,5 +59,7 @@ export const INITIAL_GAME_STATE: GameState = {
     forecast: [],
     lastWeatherChange: Date.now(),
     lastDayWeather: Date.now()
-  }
+  },
+  reputation: INITIAL_REPUTATION,
+  lastOrderRefreshDay: 0
 };

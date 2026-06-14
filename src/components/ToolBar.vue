@@ -70,6 +70,20 @@ const selectSeed = (cropType: string) => {
       <span class="text-2xl">🏪</span>
       <span class="font-pixel text-[8px] text-farm-wood-dark mt-1">商店</span>
     </div>
+    
+    <div 
+      class="tool-btn flex flex-col items-center justify-center w-16 h-16 bg-farm-ui-dark border-3 border-farm-wood-dark cursor-pointer transition-all hover:bg-farm-gold hover:scale-105 active:scale-95 relative"
+      @click="gameStore.showOrders = true"
+    >
+      <span class="text-2xl">📜</span>
+      <span class="font-pixel text-[8px] text-farm-wood-dark mt-1">委托</span>
+      <span 
+        v-if="gameStore.activeOrderCount > 0"
+        class="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white font-pixel text-[10px] rounded-full flex items-center justify-center border-2 border-farm-wood-dark"
+      >
+        {{ gameStore.activeOrderCount }}
+      </span>
+    </div>
 
     <div 
       v-if="showSeedSelector && availableSeeds.length > 0"

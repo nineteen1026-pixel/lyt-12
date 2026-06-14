@@ -1,6 +1,6 @@
 import { openDB, IDBPDatabase } from 'idb';
-import { DB_CONFIG, STORE_CONFIGS, INITIAL_GAME_STATE, type DBStores } from './schema';
-import type { GameState, Plot, Animal, InventoryItem } from '../types/game';
+import { DB_CONFIG, STORE_CONFIGS, INITIAL_GAME_STATE, INITIAL_REPUTATION, type DBStores } from './schema';
+import type { GameState, Plot, Animal, InventoryItem, Order } from '../types/game';
 import { GRID_WIDTH, GRID_HEIGHT, INITIAL_UNLOCKED } from '../types/game';
 
 class GameDatabase {
@@ -8,12 +8,28 @@ class GameDatabase {
 
   async init(): Promise<void> {
     this.db = await openDB<DBStores>(DB_CONFIG.name, DB_CONFIG.version, {
-      upgrade: (db) => {
+      upgrade: (db, oldVersion) => {
         STORE_CONFIGS.forEach(config => {
           if (!db.objectStoreNames.contains(config.name as any)) {
-            db.createObjectStore(config.name, {
+            const store = db.createObjectStore(config.name as any, {
               keyPath: config.keyPath as string | string[]
             });
+            if ((config as any).indexes) {
+              (config as any).indexes.forEach((idx: any) => {
+                store.createIndex(idx.name, idx.keyPath, { unique: false });
+              });
+            }
+          } else if (oldVersion < 2 && config.name === 'orders') {
+            const tx = db.transaction(config.name as any, 'readonly');
+            const store = tx.objectStore(config.name as any);
+            if ((config as any).indexes) {
+              (config as any).indexes.forEach((idx: any) => {
+                if (!store.indexNames.contains(idx.name)) {
+                  // Cannot create indexes on existing store within versionchange in readonly mode
+                  // This is safe because orders store didn't exist in v1
+                }
+              });
+            }
           }
         });
       }
@@ -101,7 +117,31 @@ class GameDatabase {
     return await db.getAll('inventory');
   }
 
-  async initializeNewGame(): Promise<{ state: GameState; plots: Plot[]; animals: Animal[]; inventory: InventoryItem[] }> {
+  async saveOrder(order: Order): Promise<void> {
+    const db = this.ensureDB();
+    await db.put('orders', order);
+  }
+
+  async saveAllOrders(orders: Order[]): Promise<void> {
+    const db = this.ensureDB();
+    const tx = db.transaction('orders', 'readwrite');
+    await Promise.all([
+      ...orders.map(order => tx.store.put(order)),
+      tx.done
+    ]);
+  }
+
+  async getAllOrders(): Promise<Order[]> {
+    const db = this.ensureDB();
+    return await db.getAll('orders');
+  }
+
+  async deleteOrder(orderId: string): Promise<void> {
+    const db = this.ensureDB();
+    await db.delete('orders', orderId);
+  }
+
+  async initializeNewGame(): Promise<{ state: GameState; plots: Plot[]; animals: Animal[]; inventory: InventoryItem[]; orders: Order[] }> {
     const now = Date.now();
     const state: GameState = {
       ...INITIAL_GAME_STATE,
@@ -137,21 +177,26 @@ class GameDatabase {
       }
     }
 
+    state.reputation = { ...INITIAL_REPUTATION };
+    state.lastOrderRefreshDay = 0;
+
     const animals: Animal[] = [];
     const inventory: InventoryItem[] = [
       { itemId: 'turnip_seed', quantity: 5 },
       { itemId: 'potato_seed', quantity: 3 }
     ];
+    const orders: Order[] = [];
 
     await this.saveGameState(state);
     await this.saveAllPlots(plots);
     await this.saveAllAnimals(animals);
     await this.saveAllInventory(inventory);
+    await this.saveAllOrders(orders);
 
-    return { state, plots, animals, inventory };
+    return { state, plots, animals, inventory, orders };
   }
 
-  async loadGame(): Promise<{ state: GameState; plots: Plot[]; animals: Animal[]; inventory: InventoryItem[] } | null> {
+  async loadGame(): Promise<{ state: GameState; plots: Plot[]; animals: Animal[]; inventory: InventoryItem[]; orders: Order[] } | null> {
     const state = await this.getGameState();
     if (!state) {
       return null;
@@ -167,18 +212,33 @@ class GameDatabase {
       };
     }
 
+    if (!state.reputation) {
+      state.reputation = { ...INITIAL_REPUTATION };
+    }
+
+    if (state.lastOrderRefreshDay === undefined) {
+      state.lastOrderRefreshDay = 0;
+    }
+
     const plots = await this.getAllPlots();
     const animals = await this.getAllAnimals();
     const inventory = await this.getAllInventory();
+    let orders: Order[] = [];
+    try {
+      orders = await this.getAllOrders();
+    } catch (e) {
+      orders = [];
+    }
 
-    return { state, plots, animals, inventory };
+    return { state, plots, animals, inventory, orders };
   }
 
-  async saveCompleteGame(state: GameState, plots: Plot[], animals: Animal[], inventory: InventoryItem[]): Promise<void> {
+  async saveCompleteGame(state: GameState, plots: Plot[], animals: Animal[], inventory: InventoryItem[], orders: Order[]): Promise<void> {
     await this.saveGameState(state);
     await this.saveAllPlots(plots);
     await this.saveAllAnimals(animals);
     await this.saveAllInventory(inventory);
+    await this.saveAllOrders(orders);
   }
 
   async clearAll(): Promise<void> {

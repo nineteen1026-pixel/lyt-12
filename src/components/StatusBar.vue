@@ -58,6 +58,18 @@ const seasonInfo = computed(() => {
         <span class="text-xl">🐄</span>
         <span class="font-pixel text-xs text-farm-wood-dark">{{ gameStore.animalCount.cows }}</span>
       </div>
+
+      <div class="flex items-center gap-2 pl-4 border-l-2 border-farm-wood-dark/30">
+        <span class="text-xl">⭐</span>
+        <div class="flex flex-col">
+          <span class="font-pixel text-[10px] text-farm-wood-dark leading-tight">
+            Lv.{{ gameStore.reputationLevelInfo.level }} {{ gameStore.reputationLevelInfo.name }}
+          </span>
+          <span class="font-pixel text-[9px] text-farm-gold-dark leading-tight">
+            {{ gameStore.reputation.score }}分
+          </span>
+        </div>
+      </div>
     </div>
   </div>
 </template>

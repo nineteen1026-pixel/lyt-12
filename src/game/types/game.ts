@@ -68,6 +68,47 @@ export interface AnimalConfig {
   productAmount: number;
 }
 
+export type OrderStatus = 'active' | 'completed' | 'failed';
+
+export type OrderTier = 'common' | 'rare' | 'epic' | 'legendary';
+
+export interface Villager {
+  id: string;
+  name: string;
+  avatar: string;
+}
+
+export interface OrderItem {
+  itemId: string;
+  quantity: number;
+}
+
+export interface OrderReward {
+  coins: number;
+  reputation: number;
+  rareSeedId?: string;
+  rareSeedQuantity?: number;
+}
+
+export interface Order {
+  id: string;
+  villagerId: string;
+  tier: OrderTier;
+  items: OrderItem[];
+  reward: OrderReward;
+  createdAt: number;
+  deadline: number;
+  status: OrderStatus;
+}
+
+export interface ReputationState {
+  score: number;
+  level: number;
+  completedOrders: number;
+  failedOrders: number;
+  rareSeedDropBoost: number;
+}
+
 export interface GameState {
   id: string;
   coins: number;
@@ -76,6 +117,8 @@ export interface GameState {
   lastSaveTime: number;
   lastSeasonAdvance: number;
   weather: WeatherState;
+  reputation: ReputationState;
+  lastOrderRefreshDay: number;
 }
 
 export interface InventoryItem {

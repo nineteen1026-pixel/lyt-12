@@ -6,6 +6,7 @@ import StatusBar from './components/StatusBar.vue';
 import ToolBar from './components/ToolBar.vue';
 import InventoryModal from './components/InventoryModal.vue';
 import ShopModal from './components/ShopModal.vue';
+import OrdersModal from './components/OrdersModal.vue';
 
 const gameStore = useGameStore();
 const isLoading = ref(true);
@@ -36,6 +37,7 @@ onMounted(async () => {
       
       <InventoryModal />
       <ShopModal />
+      <OrdersModal />
       
       <div class="fixed top-4 right-4 flex flex-col gap-2 z-40">
         <transition-group name="notification">

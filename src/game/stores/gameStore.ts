@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { GameState, Plot, Animal, InventoryItem, ToolType, Season, WeatherType, WeatherState } from '../types/game';
+import type { GameState, Plot, Animal, InventoryItem, ToolType, Season, WeatherType, WeatherState, Order } from '../types/game';
 import { MapGrid } from '../modules/MapGrid';
 import { CropGrowth } from '../modules/CropGrowth';
 import { Livestock } from '../modules/Livestock';
@@ -8,9 +8,11 @@ import { Inventory } from '../modules/Inventory';
 import { Shop } from '../modules/Shop';
 import { Weather } from '../modules/Weather';
 import type { WeatherEffects } from '../modules/Weather';
+import { Orders } from '../modules/Orders';
 import { gameDB } from '../db';
 import { getItem } from '../data/items';
 import { getCropConfig } from '../data/crops';
+import { getVillagerById, getReputationLevel } from '../data/orders';
 
 export const useGameStore = defineStore('game', () => {
   const gameState = ref<GameState | null>(null);
@@ -20,10 +22,12 @@ export const useGameStore = defineStore('game', () => {
   const inventory = ref<Inventory | null>(null);
   const shop = ref<Shop | null>(null);
   const weather = ref<Weather | null>(null);
+  const orders = ref<Orders | null>(null);
   const selectedTool = ref<ToolType>(null);
   const selectedSeed = ref<string | null>(null);
   const showInventory = ref(false);
   const showShop = ref(false);
+  const showOrders = ref(false);
   const isInitialized = ref(false);
   const notifications = ref<Array<{ id: number; message: string; type: 'success' | 'error' | 'info' }>>([]);
 
@@ -35,6 +39,10 @@ export const useGameStore = defineStore('game', () => {
   const currentWeather = computed(() => weather.value?.getCurrent() ?? 'sunny');
   const weatherForecast = computed(() => weather.value?.getForecast() ?? []);
   const weatherName = computed(() => weather.value?.getWeatherName(currentWeather.value) ?? '晴天');
+  const reputation = computed(() => orders.value?.getReputation() ?? { score: 0, level: 1, completedOrders: 0, failedOrders: 0, rareSeedDropBoost: 0 });
+  const reputationLevelInfo = computed(() => getReputationLevel(reputation.value.score));
+  const activeOrders = computed(() => orders.value?.getActiveOrders() ?? []);
+  const activeOrderCount = computed(() => orders.value?.getActiveOrderCount() ?? 0);
 
   let notificationId = 0;
 
@@ -75,6 +83,15 @@ export const useGameStore = defineStore('game', () => {
         savedGame.state.coins
       );
 
+      orders.value = new Orders(
+        savedGame.orders,
+        savedGame.state.reputation,
+        inventory.value,
+        shop.value,
+        savedGame.state.season,
+        savedGame.state.day
+      );
+
       const now = Date.now();
       const offlineMs = now - savedGame.state.lastSaveTime;
       
@@ -85,6 +102,9 @@ export const useGameStore = defineStore('game', () => {
           const newForecast = weather.value.generateForecast(3);
           weather.value.getState().forecast = newForecast;
         }
+
+        orders.value.setCurrentSeason(mapGrid.value.getSeason());
+        orders.value.setCurrentDay(mapGrid.value.getDay());
 
         const weatherHistory = weather.value.processOfflineWeather(offlineMs, now);
         if (weatherHistory.length > 0) {
@@ -99,6 +119,11 @@ export const useGameStore = defineStore('game', () => {
 
         const cropUpdates = cropGrowth.value.processOfflineGrowth(offlineMs, now);
         const animalUpdates = livestock.value.processOfflineProduction(offlineMs, now);
+
+        const expiredOrders = orders.value.checkAndProcessExpiredOrders();
+        if (expiredOrders.length > 0) {
+          gameState.value.coins = shop.value.getCoins();
+        }
 
         let offlineMsg = '离线期间：';
         let hasContent = false;
@@ -118,6 +143,10 @@ export const useGameStore = defineStore('game', () => {
           offlineMsg += `进入${getSeasonName(seasonUpdate.newSeason!)}，`;
           hasContent = true;
         }
+        if (expiredOrders.length > 0) {
+          offlineMsg += `${expiredOrders.length}个订单超时违约，`;
+          hasContent = true;
+        }
         if (hasContent) {
           addNotification(offlineMsg.slice(0, -1), 'info');
         }
@@ -126,6 +155,20 @@ export const useGameStore = defineStore('game', () => {
         gameState.value.season = mapGrid.value.getSeason();
         gameState.value.day = mapGrid.value.getDay();
         gameState.value.weather = weather.value.getState();
+        gameState.value.reputation = orders.value.getReputation();
+      }
+
+      if (orders.value.shouldRefreshOrders(savedGame.state.lastOrderRefreshDay)) {
+        const { newOrders, failedOrders } = orders.value.refreshOrders();
+        gameState.value.lastOrderRefreshDay = mapGrid.value.getDay();
+        gameState.value.reputation = orders.value.getReputation();
+        gameState.value.coins = shop.value.getCoins();
+        if (failedOrders.length > 0) {
+          addNotification(`${failedOrders.length}个订单因未完成而违约`, 'error');
+        }
+        if (newOrders.length > 0) {
+          addNotification(`今日有${newOrders.length}个新村民订单！`, 'info');
+        }
       }
     } else {
       const newGame = await gameDB.initializeNewGame();
@@ -150,7 +193,24 @@ export const useGameStore = defineStore('game', () => {
         livestock.value,
         newGame.state.coins
       );
+
+      orders.value = new Orders(
+        newGame.orders,
+        newGame.state.reputation,
+        inventory.value,
+        shop.value,
+        newGame.state.season,
+        newGame.state.day
+      );
+
+      const { newOrders } = orders.value.refreshOrders();
+      gameState.value.lastOrderRefreshDay = newGame.state.day;
+      gameState.value.reputation = orders.value.getReputation();
+
       addNotification('欢迎来到像素农场！', 'success');
+      if (newOrders.length > 0) {
+        addNotification(`今日有${newOrders.length}个村民订单等你完成！`, 'info');
+      }
     }
 
     isInitialized.value = true;
@@ -174,7 +234,7 @@ export const useGameStore = defineStore('game', () => {
   }
 
   async function saveGame() {
-    if (!gameState.value || !mapGrid.value || !livestock.value || !inventory.value || !shop.value || !weather.value) {
+    if (!gameState.value || !mapGrid.value || !livestock.value || !inventory.value || !shop.value || !weather.value || !orders.value) {
       return;
     }
 
@@ -183,12 +243,14 @@ export const useGameStore = defineStore('game', () => {
     gameState.value.day = mapGrid.value.getDay();
     gameState.value.lastSeasonAdvance = mapGrid.value.getLastSeasonAdvance();
     gameState.value.weather = weather.value.getState();
+    gameState.value.reputation = orders.value.getReputation();
 
     await gameDB.saveCompleteGame(
       gameState.value,
       mapGrid.value.getAllPlots(),
       livestock.value.getAnimals(),
-      inventory.value.getInventoryItems()
+      inventory.value.getInventoryItems(),
+      orders.value.getOrders()
     );
   }
 
@@ -372,7 +434,7 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function updateGame(time: number) {
-    if (!mapGrid.value || !cropGrowth.value || !livestock.value || !weather.value) {
+    if (!mapGrid.value || !cropGrowth.value || !livestock.value || !weather.value || !orders.value || !gameState.value || !shop.value) {
       return;
     }
 
@@ -380,10 +442,12 @@ export const useGameStore = defineStore('game', () => {
     if (seasonUpdate.advanced) {
       addNotification(`季节变换：进入${getSeasonName(seasonUpdate.newSeason!)}！`, 'info');
       weather.value.setSeason(seasonUpdate.newSeason!);
+      orders.value.setCurrentSeason(seasonUpdate.newSeason!);
       const newForecast = weather.value.generateForecast(3);
       weather.value.getState().forecast = newForecast;
       if (seasonUpdate.newDay) {
-        gameState.value!.day = seasonUpdate.newDay;
+        gameState.value.day = seasonUpdate.newDay;
+        orders.value.setCurrentDay(seasonUpdate.newDay);
       }
     }
 
@@ -394,8 +458,92 @@ export const useGameStore = defineStore('game', () => {
       notifyWeatherEffects(effects, false);
     }
 
+    const expiredOrders = orders.value.checkAndProcessExpiredOrders();
+    if (expiredOrders.length > 0) {
+      gameState.value.coins = shop.value.getCoins();
+      gameState.value.reputation = orders.value.getReputation();
+      for (const expired of expiredOrders) {
+        const villager = getVillagerById(expired.villagerId);
+        addNotification(`${villager?.name || '村民'}的订单超时违约！信誉-15`, 'error');
+      }
+      saveGame();
+    }
+
+    if (orders.value.shouldRefreshOrders(gameState.value.lastOrderRefreshDay)) {
+      orders.value.setCurrentSeason(mapGrid.value.getSeason());
+      orders.value.setCurrentDay(mapGrid.value.getDay());
+      const { newOrders, failedOrders } = orders.value.refreshOrders();
+      gameState.value.lastOrderRefreshDay = mapGrid.value.getDay();
+      gameState.value.reputation = orders.value.getReputation();
+      gameState.value.coins = shop.value.getCoins();
+      if (failedOrders.length > 0) {
+        addNotification(`${failedOrders.length}个订单因未完成而违约`, 'error');
+      }
+      if (newOrders.length > 0) {
+        addNotification(`今日有${newOrders.length}个新村民订单！`, 'info');
+      }
+      saveGame();
+    }
+
     cropGrowth.value.updateAllCrops(time);
     livestock.value.updateAllProduction(time);
+  }
+
+  function submitOrder(orderId: string) {
+    if (!orders.value || !gameState.value || !shop.value) {
+      return { success: false, message: '系统未初始化' };
+    }
+
+    const result = orders.value.submitOrder(orderId);
+    if (result.success) {
+      gameState.value.coins = shop.value.getCoins();
+      gameState.value.reputation = orders.value.getReputation();
+      
+      let msg = `订单完成！获得${result.coins}金币，+${result.reputation}信誉`;
+      if (result.rareSeedId && result.rareSeedQuantity) {
+        const seedItem = getItem(result.rareSeedId);
+        msg += `，额外获得${result.rareSeedQuantity}个${seedItem?.name || '稀有种子'}`;
+      }
+      addNotification(msg, 'success');
+      saveGame();
+    } else {
+      addNotification(result.message || '提交失败！', 'error');
+    }
+    return result;
+  }
+
+  function canSubmitOrder(orderId: string) {
+    if (!orders.value) {
+      return { canSubmit: false, missingItems: [] };
+    }
+    const order = orders.value.getOrderById(orderId);
+    if (!order) {
+      return { canSubmit: false, missingItems: [] };
+    }
+    return orders.value.canSubmitOrder(order);
+  }
+
+  function getOrderRemainingDays(orderId: string): number {
+    if (!orders.value) return 0;
+    const order = orders.value.getOrderById(orderId);
+    if (!order) return 0;
+    return orders.value.getRemainingDays(order);
+  }
+
+  function refreshOrdersNow() {
+    if (!orders.value || !gameState.value) {
+      return { newOrders: [], failedOrders: [] };
+    }
+    const result = orders.value.forceRefreshAll();
+    gameState.value.lastOrderRefreshDay = mapGrid.value?.getDay() ?? gameState.value.lastOrderRefreshDay;
+    gameState.value.reputation = orders.value.getReputation();
+    gameState.value.coins = shop.value?.getCoins() ?? gameState.value.coins;
+    if (result.failedOrders.length > 0) {
+      addNotification(`强制刷新导致${result.failedOrders.length}个订单违约`, 'error');
+    }
+    addNotification(`已刷新${result.newOrders.length}个新订单`, 'info');
+    saveGame();
+    return result;
   }
 
   function getSeasonName(s: Season): string {
@@ -416,10 +564,12 @@ export const useGameStore = defineStore('game', () => {
     inventory,
     shop,
     weather,
+    orders,
     selectedTool,
     selectedSeed,
     showInventory,
     showShop,
+    showOrders,
     isInitialized,
     notifications,
     coins,
@@ -430,6 +580,10 @@ export const useGameStore = defineStore('game', () => {
     currentWeather,
     weatherForecast,
     weatherName,
+    reputation,
+    reputationLevelInfo,
+    activeOrders,
+    activeOrderCount,
     initGame,
     saveGame,
     useTool,
@@ -441,6 +595,10 @@ export const useGameStore = defineStore('game', () => {
     sellAllItems,
     expandPlot,
     updateGame,
-    addNotification
+    addNotification,
+    submitOrder,
+    canSubmitOrder,
+    getOrderRemainingDays,
+    refreshOrdersNow
   };
 });
