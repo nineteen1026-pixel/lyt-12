@@ -339,6 +339,22 @@ export const useGameStore = defineStore('game', () => {
     return result;
   }
 
+  function sellAllItems() {
+    if (!shop.value || !gameState.value) {
+      return { success: false, totalEarned: 0, sold: [] };
+    }
+
+    const result = shop.value.sellAllItems();
+    if (result.success) {
+      gameState.value.coins = shop.value.getCoins();
+      addNotification(`一键出售完成！获得${result.totalEarned}金币！`, 'success');
+      saveGame();
+    } else {
+      addNotification('没有可出售的物品！', 'error');
+    }
+    return result;
+  }
+
   function expandPlot() {
     if (!shop.value || !gameState.value) {
       return { success: false };
@@ -422,6 +438,7 @@ export const useGameStore = defineStore('game', () => {
     handleAnimalClick,
     buyItem,
     sellItem,
+    sellAllItems,
     expandPlot,
     updateGame,
     addNotification

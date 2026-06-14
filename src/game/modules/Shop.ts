@@ -2,17 +2,34 @@ import type { Item } from '../types/game';
 import { getItem, getBuyableSeeds, getBuyableAnimals } from '../data/items';
 import { getCropConfig } from '../data/crops';
 import { getAnimalConfig } from '../data/animals';
-import { Inventory } from './Inventory';
-import { MapGrid } from './MapGrid';
-import { Livestock } from './Livestock';
+import type { Inventory } from './Inventory';
+import type { MapGrid } from './MapGrid';
+import type { Livestock } from './Livestock';
+
+export interface InventoryAccess {
+  addItem(itemId: string, quantity: number): boolean;
+  removeItem(itemId: string, quantity: number): boolean;
+  hasItem(itemId: string, quantity: number): boolean;
+  getSellableItems(): Array<{ itemId: string; quantity: number; sellPrice: number }>;
+}
+
+export interface MapGridAccess {
+  getNextUnlockablePlot(): { x: number; y: number } | null;
+  getUnlockPrice(x: number, y: number): number;
+  unlockPlot(x: number, y: number): boolean;
+}
+
+export interface LivestockAccess {
+  addAnimal(type: 'chicken' | 'cow'): boolean;
+}
 
 export class Shop {
-  private inventory: Inventory;
-  private mapGrid: MapGrid;
-  private livestock: Livestock;
+  private inventory: InventoryAccess;
+  private mapGrid: MapGridAccess;
+  private livestock: LivestockAccess;
   private coins: number;
 
-  constructor(inventory: Inventory, mapGrid: MapGrid, livestock: Livestock, coins: number) {
+  constructor(inventory: InventoryAccess, mapGrid: MapGridAccess, livestock: LivestockAccess, coins: number) {
     this.inventory = inventory;
     this.mapGrid = mapGrid;
     this.livestock = livestock;

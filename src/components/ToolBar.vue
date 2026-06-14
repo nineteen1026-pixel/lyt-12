@@ -3,15 +3,14 @@ import { ref, computed } from 'vue';
 import { useGameStore } from '../game/stores/gameStore';
 import { getItem } from '../game/data/items';
 import { getCropConfig } from '../game/data/crops';
-import type { ToolType } from '../game/types/game';
 
 const gameStore = useGameStore();
 const showSeedSelector = ref(false);
 
 const tools = computed(() => [
-  { id: 'hoe' as ToolType, icon: '⛏️', name: '锄头', desc: '翻地' },
-  { id: 'water' as ToolType, icon: '💧', name: '水壶', desc: '浇水' },
-  { id: 'hand' as ToolType, icon: '✋', name: '手', desc: '播种/收获' }
+  { id: 'hoe' as const, icon: '⛏️', name: '锄头', desc: '翻地' },
+  { id: 'water' as const, icon: '💧', name: '水壶', desc: '浇水' },
+  { id: 'hand' as const, icon: '✋', name: '手', desc: '播种/收获' }
 ]);
 
 const availableSeeds = computed(() => {
@@ -26,7 +25,7 @@ const availableSeeds = computed(() => {
   }));
 });
 
-const selectTool = (tool: ToolType) => {
+const selectTool = (tool: 'hoe' | 'water' | 'hand') => {
   gameStore.useTool(tool);
   if (tool === 'hand' && availableSeeds.value.length > 0) {
     showSeedSelector.value = true;

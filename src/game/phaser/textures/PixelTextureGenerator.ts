@@ -16,7 +16,7 @@ export class PixelTextureGenerator {
 
   private static generateGrass(scene: Phaser.Scene) {
     const size = 64;
-    const graphics = scene.make.graphics({ add: false });
+    const graphics = scene.make.graphics({ add: false } as any);
     
     graphics.fillStyle(0x7cb342);
     graphics.fillRect(0, 0, size, size);
@@ -35,7 +35,7 @@ export class PixelTextureGenerator {
 
   private static generateTilledSoil(scene: Phaser.Scene) {
     const size = 64;
-    const graphics = scene.make.graphics({ add: false });
+    const graphics = scene.make.graphics({ add: false } as any);
     
     graphics.fillStyle(0x8d6e63);
     graphics.fillRect(2, 2, size - 4, size - 4);
@@ -54,7 +54,7 @@ export class PixelTextureGenerator {
 
   private static generateWetSoil(scene: Phaser.Scene) {
     const size = 64;
-    const graphics = scene.make.graphics({ add: false });
+    const graphics = scene.make.graphics({ add: false } as any);
     
     graphics.fillStyle(0x4e342e);
     graphics.fillRect(2, 2, size - 4, size - 4);
@@ -80,7 +80,7 @@ export class PixelTextureGenerator {
 
   private static generatePlotLocked(scene: Phaser.Scene) {
     const size = 64;
-    const graphics = scene.make.graphics({ add: false });
+    const graphics = scene.make.graphics({ add: false } as any);
     
     graphics.fillStyle(0x607d8b, 0.7);
     graphics.fillRect(0, 0, size, size);
@@ -106,7 +106,7 @@ export class PixelTextureGenerator {
 
   private static generatePlotHighlight(scene: Phaser.Scene) {
     const size = 64;
-    const graphics = scene.make.graphics({ add: false });
+    const graphics = scene.make.graphics({ add: false } as any);
     
     graphics.lineStyle(4, 0xffd54f);
     graphics.strokeRect(0, 0, size, size);
@@ -143,7 +143,7 @@ export class PixelTextureGenerator {
     color: number
   ) {
     const size = 64;
-    const graphics = scene.make.graphics({ add: false });
+    const graphics = scene.make.graphics({ add: false } as any);
     
     const progress = (stage + 1) / maxStages;
     const height = Math.floor(8 + progress * 40);
@@ -185,7 +185,7 @@ export class PixelTextureGenerator {
 
   private static generateChicken(scene: Phaser.Scene) {
     const size = 64;
-    const graphics = scene.make.graphics({ add: false });
+    const graphics = scene.make.graphics({ add: false } as any);
     
     graphics.fillStyle(0xfff8e1);
     graphics.fillEllipse(size / 2, size / 2 + 4, 28, 24);
@@ -212,7 +212,7 @@ export class PixelTextureGenerator {
 
   private static generateCow(scene: Phaser.Scene) {
     const size = 64;
-    const graphics = scene.make.graphics({ add: false });
+    const graphics = scene.make.graphics({ add: false } as any);
     
     graphics.fillStyle(0xfafafa);
     graphics.fillEllipse(size / 2, size / 2 + 8, 32, 22);
@@ -243,7 +243,7 @@ export class PixelTextureGenerator {
 
   private static generateEgg(scene: Phaser.Scene) {
     const size = 32;
-    const graphics = scene.make.graphics({ add: false });
+    const graphics = scene.make.graphics({ add: false } as any);
     
     graphics.fillStyle(0xffffff);
     graphics.fillEllipse(size / 2, size / 2, 14, 18);
@@ -257,7 +257,7 @@ export class PixelTextureGenerator {
 
   private static generateMilk(scene: Phaser.Scene) {
     const size = 32;
-    const graphics = scene.make.graphics({ add: false });
+    const graphics = scene.make.graphics({ add: false } as any);
     
     graphics.fillStyle(0xffffff);
     graphics.fillRect(size / 2 - 10, size / 2 - 8, 20, 18);
@@ -276,25 +276,25 @@ export class PixelTextureGenerator {
     const width = 768;
     const height = 512;
     
-    const spring = scene.make.graphics({ add: false });
+    const spring = scene.make.graphics({ add: false } as any);
     spring.fillStyle(0xaed581, 0.15);
     spring.fillRect(0, 0, width, height);
     spring.generateTexture('season_spring', width, height);
     spring.destroy();
     
-    const summer = scene.make.graphics({ add: false });
+    const summer = scene.make.graphics({ add: false } as any);
     summer.fillStyle(0xffd54f, 0.1);
     summer.fillRect(0, 0, width, height);
     summer.generateTexture('season_summer', width, height);
     summer.destroy();
     
-    const autumn = scene.make.graphics({ add: false });
+    const autumn = scene.make.graphics({ add: false } as any);
     autumn.fillStyle(0xff9800, 0.15);
     autumn.fillRect(0, 0, width, height);
     autumn.generateTexture('season_autumn', width, height);
     autumn.destroy();
     
-    const winter = scene.make.graphics({ add: false });
+    const winter = scene.make.graphics({ add: false } as any);
     winter.fillStyle(0xe0e0e0, 0.3);
     winter.fillRect(0, 0, width, height);
     winter.generateTexture('season_winter', width, height);
@@ -312,7 +312,7 @@ export class PixelTextureGenerator {
   }
 
   private static generateSunnyIcon(scene: Phaser.Scene, size: number) {
-    const graphics = scene.make.graphics({ add: false });
+    const graphics = scene.make.graphics({ add: false } as any);
 
     graphics.fillStyle(0xffd54f);
     graphics.fillCircle(size / 2, size / 2, 12);
@@ -336,7 +336,7 @@ export class PixelTextureGenerator {
   }
 
   private static generateRainyIcon(scene: Phaser.Scene, size: number) {
-    const graphics = scene.make.graphics({ add: false });
+    const graphics = scene.make.graphics({ add: false } as any);
 
     graphics.fillStyle(0x90a4ae);
     graphics.fillEllipse(size / 2 - 6, size / 2 - 6, 18, 12);
@@ -355,7 +355,7 @@ export class PixelTextureGenerator {
   }
 
   private static generateSnowyIcon(scene: Phaser.Scene, size: number) {
-    const graphics = scene.make.graphics({ add: false });
+    const graphics = scene.make.graphics({ add: false } as any);
 
     graphics.fillStyle(0xb0bec5);
     graphics.fillEllipse(size / 2 - 6, size / 2 - 6, 18, 12);
@@ -374,7 +374,7 @@ export class PixelTextureGenerator {
   }
 
   private static generateStormyIcon(scene: Phaser.Scene, size: number) {
-    const graphics = scene.make.graphics({ add: false });
+    const graphics = scene.make.graphics({ add: false } as any);
 
     graphics.fillStyle(0x546e7a);
     graphics.fillEllipse(size / 2 - 6, size / 2 - 8, 18, 12);
@@ -407,14 +407,14 @@ export class PixelTextureGenerator {
   private static generateWeatherBg(scene: Phaser.Scene, size: number) {
     const width = 768;
     const height = 60;
-    const graphics = scene.make.graphics({ add: false });
+    const graphics = scene.make.graphics({ add: false } as any);
 
     graphics.fillStyle(0x000000, 0.5);
     graphics.fillRect(0, 0, width, height);
     graphics.generateTexture('weather_bar_bg', width, height);
     graphics.destroy();
 
-    const frame = scene.make.graphics({ add: false });
+    const frame = scene.make.graphics({ add: false } as any);
     const frameSize = size + 12;
     frame.fillStyle(0xffffff, 0.15);
     frame.lineStyle(2, 0xffffff, 0.5);
@@ -423,7 +423,7 @@ export class PixelTextureGenerator {
     frame.generateTexture('weather_frame', frameSize, frameSize);
     frame.destroy();
 
-    const activeFrame = scene.make.graphics({ add: false });
+    const activeFrame = scene.make.graphics({ add: false } as any);
     activeFrame.fillStyle(0xffd54f, 0.2);
     activeFrame.lineStyle(3, 0xffd54f, 0.8);
     activeFrame.fillRect(0, 0, frameSize, frameSize);
@@ -434,7 +434,7 @@ export class PixelTextureGenerator {
 
   private static generateFrozenOverlay(scene: Phaser.Scene) {
     const size = 64;
-    const graphics = scene.make.graphics({ add: false });
+    const graphics = scene.make.graphics({ add: false } as any);
 
     graphics.fillStyle(0x81d4fa, 0.4);
     graphics.fillRect(4, 4, size - 8, size - 8);

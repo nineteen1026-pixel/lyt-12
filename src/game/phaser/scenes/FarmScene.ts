@@ -124,7 +124,7 @@ export class FarmScene extends Phaser.Scene {
     if (plot.crop) {
       const config = getCropConfig(plot.crop.type);
       if (config) {
-        const growth = this.gameStore.cropGrowth?.calculateGrowth(plot.crop, this.currentTime || Date.now());
+        const growth = this.gameStore.cropGrowth?.calculateGrowth(plot.crop, this.currentTime || Date.now()) ?? 0;
         const stage = Math.min(config.stages - 1, Math.floor(growth * config.stages));
         const cropSprite = this.add.image(TILE_SIZE / 2, TILE_SIZE / 2, `crop_${plot.crop.type}_${stage}`);
         cropSprite.setOrigin(0.5, 1);
