@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
+import { ref, computed, toRaw } from 'vue';
 import type { GameState, Plot, Animal, InventoryItem, ToolType, Season, WeatherType, WeatherState, Order, Building, BuildingType, BuildingConfig } from '../types/game';
 import { MapGrid } from '../modules/MapGrid';
 import { CropGrowth } from '../modules/CropGrowth';
@@ -283,13 +283,20 @@ export const useGameStore = defineStore('game', () => {
     gameState.value.weather = weather.value.getState();
     gameState.value.reputation = orders.value.getReputation();
 
+    const rawState = JSON.parse(JSON.stringify(toRaw(gameState.value)));
+    const rawPlots = JSON.parse(JSON.stringify(toRaw(mapGrid.value.getAllPlots())));
+    const rawAnimals = JSON.parse(JSON.stringify(toRaw(livestock.value.getAnimals())));
+    const rawInventory = JSON.parse(JSON.stringify(toRaw(inventory.value.getInventoryItems())));
+    const rawOrders = JSON.parse(JSON.stringify(toRaw(orders.value.getOrders())));
+    const rawBuildings = JSON.parse(JSON.stringify(toRaw(buildings.value.getBuildings())));
+
     await gameDB.saveCompleteGame(
-      gameState.value,
-      mapGrid.value.getAllPlots(),
-      livestock.value.getAnimals(),
-      inventory.value.getInventoryItems(),
-      orders.value.getOrders(),
-      buildings.value.getBuildings()
+      rawState,
+      rawPlots,
+      rawAnimals,
+      rawInventory,
+      rawOrders,
+      rawBuildings
     );
   }
 

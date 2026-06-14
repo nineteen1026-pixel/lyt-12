@@ -1,17 +1,25 @@
 import Phaser from 'phaser';
 import { useGameStore } from '../../stores/gameStore';
-import type { Plot, WeatherType } from '../../types/game';
+import type { Plot, WeatherType, BuildingType, Building } from '../../types/game';
 import { GRID_WIDTH, GRID_HEIGHT, TILE_SIZE, DAY_DURATION } from '../../types/game';
 import { getCropConfig } from '../../data/crops';
+import { getBuildingConfig } from '../../data/buildings';
 
 export class FarmScene extends Phaser.Scene {
   private gameStore!: ReturnType<typeof useGameStore>;
   private plotSprites: Map<string, Phaser.GameObjects.Container> = new Map();
-  private animalSprites: Map<string, Phaser.GameObjects.Container> = new Map();
+  private buildingSprites: Map<string, Phaser.GameObjects.Container> = new Map();
+  private sprinklerWateredTiles: Set<string> = new Set();
+  private greenhouseTiles: Set<string> = new Set();
   private highlightSprite!: Phaser.GameObjects.Image;
+  private buildPreviewSprite!: Phaser.GameObjects.Container;
+  private buildRangeIndicator!: Phaser.GameObjects.Graphics;
+  private sprinklerEffectGraphics!: Phaser.GameObjects.Graphics;
+  private greenhouseEffectGraphics!: Phaser.GameObjects.Graphics;
   private seasonOverlay!: Phaser.GameObjects.Image;
   private weatherBarContainer!: Phaser.GameObjects.Container;
   private weatherIcons: Map<string, Phaser.GameObjects.Container> = new Map();
+  private animalSprites: Map<string, Phaser.GameObjects.Container> = new Map();
   private dayProgressBar!: Phaser.GameObjects.Graphics;
   private weatherLabel!: Phaser.GameObjects.Text;
   private dayText!: Phaser.GameObjects.Text;
@@ -20,6 +28,10 @@ export class FarmScene extends Phaser.Scene {
   private lastSave: number = 0;
   private lastWeatherType: WeatherType | null = null;
   private lastForecast: WeatherType[] = [];
+  private lastBuildingCount: number = -1;
+  private lastSelectedBuilding: BuildingType | null = null;
+  private hoveredPlotX: number = -1;
+  private hoveredPlotY: number = -1;
 
   constructor() {
     super('FarmScene');
@@ -31,6 +43,7 @@ export class FarmScene extends Phaser.Scene {
     this.setupScene();
     this.renderPlots();
     this.renderAnimals();
+    this.renderBuildings();
     this.setupInput();
     this.setupEventListeners();
     this.renderWeatherBar();
@@ -66,6 +79,19 @@ export class FarmScene extends Phaser.Scene {
     this.highlightSprite = this.add.image(0, 0, 'plot_highlight');
     this.highlightSprite.setVisible(false);
     this.highlightSprite.setDepth(10);
+
+    this.sprinklerEffectGraphics = this.add.graphics();
+    this.sprinklerEffectGraphics.setDepth(8);
+
+    this.greenhouseEffectGraphics = this.add.graphics();
+    this.greenhouseEffectGraphics.setDepth(8);
+
+    this.buildRangeIndicator = this.add.graphics();
+    this.buildRangeIndicator.setDepth(20);
+
+    this.buildPreviewSprite = this.add.container(0, 0);
+    this.buildPreviewSprite.setDepth(25);
+    this.buildPreviewSprite.setVisible(false);
   }
 
   private getSeasonBgColor(season: string): number {
@@ -86,6 +112,101 @@ export class FarmScene extends Phaser.Scene {
     plots.forEach(plot => {
       this.renderPlot(plot);
     });
+  }
+
+  private renderBuildings() {
+    if (!this.gameStore.buildings) return;
+
+    this.buildingSprites.forEach(container => container.destroy());
+    this.buildingSprites.clear();
+
+    const buildings = this.gameStore.buildings.getBuildings();
+    
+    buildings.forEach(building => {
+      this.renderBuilding(building);
+    });
+
+    this.refreshBuildingEffects();
+  }
+
+  private renderBuilding(building: Building) {
+    const config = getBuildingConfig(building.type);
+    if (!config) return;
+
+    const x = building.x * TILE_SIZE;
+    const y = building.y * TILE_SIZE;
+    const width = config.footprint.width * TILE_SIZE;
+    const height = config.footprint.height * TILE_SIZE;
+
+    const container = this.add.container(x, y);
+    container.setSize(width, height);
+    container.setDepth(15);
+
+    const bg = this.add.graphics();
+    bg.fillStyle(0x8d6e63, 0.8);
+    bg.fillRect(0, 0, width, height);
+    bg.lineStyle(3, 0x5d4037, 1);
+    bg.strokeRect(0, 0, width, height);
+    container.add(bg);
+
+    const iconSize = Math.min(width, height) * 0.7;
+    const iconX = width / 2;
+    const iconY = height / 2;
+    
+    const iconText = this.add.text(iconX, iconY, config.icon, {
+      fontFamily: 'Arial',
+      fontSize: `${iconSize}px`,
+      color: '#ffffff'
+    });
+    iconText.setOrigin(0.5, 0.5);
+    iconText.setShadow(2, 2, '#000000', 2, true, true);
+    container.add(iconText);
+
+    const typeLabel = this.add.text(width / 2, height - 8, config.name, {
+      fontFamily: 'Arial',
+      fontSize: '10px',
+      color: '#ffffff',
+      fontStyle: 'bold'
+    });
+    typeLabel.setOrigin(0.5, 1);
+    typeLabel.setShadow(1, 1, '#000000', 1, true, true);
+    container.add(typeLabel);
+
+    this.buildingSprites.set(building.id, container);
+  }
+
+  private refreshBuildingEffects() {
+    this.sprinklerWateredTiles.clear();
+    this.greenhouseTiles.clear();
+    this.sprinklerEffectGraphics.clear();
+    this.greenhouseEffectGraphics.clear();
+
+    if (!this.gameStore.buildings) return;
+
+    const wateredPlots = this.gameStore.buildings.getSprinklerWateredPlots();
+    wateredPlots.forEach(p => {
+      this.sprinklerWateredTiles.add(`${p.x},${p.y}`);
+      const px = p.x * TILE_SIZE;
+      const py = p.y * TILE_SIZE;
+      this.sprinklerEffectGraphics.fillStyle(0x4fc3f7, 0.25);
+      this.sprinklerEffectGraphics.fillRect(px + 2, py + 2, TILE_SIZE - 4, TILE_SIZE - 4);
+      this.sprinklerEffectGraphics.lineStyle(2, 0x29b6f6, 0.6);
+      this.sprinklerEffectGraphics.strokeRect(px + 2, py + 2, TILE_SIZE - 4, TILE_SIZE - 4);
+    });
+
+    for (let y = 0; y < GRID_HEIGHT; y++) {
+      for (let x = 0; x < GRID_WIDTH; x++) {
+        if (this.gameStore.buildings.isGreenhousePlot(x, y) && !this.gameStore.buildings.isPlotOccupied(x, y)) {
+          this.greenhouseTiles.add(`${x},${y}`);
+          const px = x * TILE_SIZE;
+          const py = y * TILE_SIZE;
+          this.greenhouseEffectGraphics.fillStyle(0x81c784, 0.18);
+          this.greenhouseEffectGraphics.fillRect(px + 4, py + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+          this.greenhouseEffectGraphics.lineStyle(2, 0x66bb6a, 0.5);
+          this.greenhouseEffectGraphics.strokeRect(px + 4, py + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+        }
+      }
+    }
   }
 
   private renderPlot(plot: Plot) {
@@ -112,6 +233,15 @@ export class FarmScene extends Phaser.Scene {
       locked.setOrigin(0, 0);
       container.add(locked);
       return;
+    }
+
+    if (plot.buildingId) {
+      const buildingOverlay = this.add.graphics();
+      buildingOverlay.fillStyle(0x6d4c41, 0.4);
+      buildingOverlay.fillRect(0, 0, TILE_SIZE, TILE_SIZE);
+      buildingOverlay.lineStyle(2, 0x4e342e, 1);
+      buildingOverlay.strokeRect(0, 0, TILE_SIZE, TILE_SIZE);
+      container.add(buildingOverlay);
     }
 
     if (plot.state === 'tilled' || plot.state === 'planted' || plot.state === 'watered' || plot.state === 'ready') {
@@ -147,19 +277,57 @@ export class FarmScene extends Phaser.Scene {
       }
     }
 
+    const hasSprinklerEffect = this.sprinklerWateredTiles.has(key);
+    const hasGreenhouseEffect = this.greenhouseTiles.has(key);
+
+    if (hasSprinklerEffect || hasGreenhouseEffect) {
+      const effectOverlay = this.add.container(0, 0);
+      effectOverlay.setDepth(4);
+      
+      if (hasSprinklerEffect) {
+        const waterIcon = this.add.text(TILE_SIZE - 8, 6, '💧', {
+          fontSize: '12px'
+        });
+        waterIcon.setOrigin(1, 0);
+        waterIcon.setAlpha(0.8);
+        effectOverlay.add(waterIcon);
+      }
+      
+      if (hasGreenhouseEffect) {
+        const ghIcon = this.add.text(8, 6, '🏠', {
+          fontSize: '12px'
+        });
+        ghIcon.setOrigin(0, 0);
+        ghIcon.setAlpha(0.8);
+        effectOverlay.add(ghIcon);
+      }
+      
+      container.add(effectOverlay);
+    }
+
     container.on('pointerdown', () => {
       this.onPlotClick(plot.x, plot.y);
     });
 
     container.on('pointerover', () => {
-      if (plot.unlocked) {
+      this.hoveredPlotX = plot.x;
+      this.hoveredPlotY = plot.y;
+      if (this.gameStore.selectedBuilding) {
+        this.updateBuildPreview(plot.x, plot.y);
+      } else if (plot.unlocked) {
         this.highlightSprite.setPosition(x, y);
         this.highlightSprite.setVisible(true);
       }
     });
 
     container.on('pointerout', () => {
-      this.highlightSprite.setVisible(false);
+      this.hoveredPlotX = -1;
+      this.hoveredPlotY = -1;
+      if (this.gameStore.selectedBuilding) {
+        this.clearBuildPreview();
+      } else {
+        this.highlightSprite.setVisible(false);
+      }
     });
   }
 
@@ -214,7 +382,17 @@ export class FarmScene extends Phaser.Scene {
 
   private onPlotClick(x: number, y: number) {
     this.gameStore.handlePlotClick(x, y);
-    this.refreshPlot(x, y);
+    
+    if (this.gameStore.selectedBuilding) {
+      this.refreshAllWithBuildings();
+      if (!this.gameStore.selectedBuilding) {
+        this.clearBuildPreview();
+      } else if (this.hoveredPlotX >= 0 && this.hoveredPlotY >= 0) {
+        this.updateBuildPreview(this.hoveredPlotX, this.hoveredPlotY);
+      }
+    } else {
+      this.refreshPlot(x, y);
+    }
   }
 
   private onAnimalClick(animalId: string) {
@@ -243,9 +421,122 @@ export class FarmScene extends Phaser.Scene {
     this.renderAnimals();
   }
 
+  private updateBuildPreview(x: number, y: number) {
+    const buildingType = this.gameStore.selectedBuilding;
+    if (!buildingType || !this.gameStore.canPlaceBuilding) return;
+
+    const config = getBuildingConfig(buildingType);
+    if (!config) return;
+
+    this.clearBuildPreview();
+
+    const canPlace = this.gameStore.canPlaceBuilding(buildingType, x, y);
+    const isValid = canPlace.canPlace;
+
+    this.buildPreviewSprite.setPosition(x * TILE_SIZE, y * TILE_SIZE);
+    this.buildPreviewSprite.setVisible(true);
+
+    const width = config.footprint.width * TILE_SIZE;
+    const height = config.footprint.height * TILE_SIZE;
+
+    const bg = this.add.graphics();
+    const fillColor = isValid ? 0x4caf50 : 0xf44336;
+    bg.fillStyle(fillColor, 0.3);
+    bg.fillRect(0, 0, width, height);
+    bg.lineStyle(3, fillColor, 0.8);
+    bg.strokeRect(0, 0, width, height);
+    this.buildPreviewSprite.add(bg);
+
+    const iconSize = Math.min(width, height) * 0.5;
+    const iconText = this.add.text(width / 2, height / 2, config.icon, {
+      fontFamily: 'Arial',
+      fontSize: `${iconSize}px`,
+      color: '#ffffff'
+    });
+    iconText.setOrigin(0.5, 0.5);
+    iconText.setAlpha(0.8);
+    iconText.setShadow(2, 2, '#000000', 2, true, true);
+    this.buildPreviewSprite.add(iconText);
+
+    this.buildRangeIndicator.clear();
+    const range = config.effect.sprinklerRange ?? 0;
+    if (buildingType === 'sprinkler' && range > 0) {
+      const cx = x + Math.floor(config.footprint.width / 2);
+      const cy = y + Math.floor(config.footprint.height / 2);
+      for (let dy = -range; dy <= range; dy++) {
+        for (let dx = -range; dx <= range; dx++) {
+          const px = cx + dx;
+          const py = cy + dy;
+          if (px < 0 || px >= GRID_WIDTH || py < 0 || py >= GRID_HEIGHT) continue;
+          this.buildRangeIndicator.fillStyle(0x4fc3f7, 0.25);
+          this.buildRangeIndicator.fillRect(
+            px * TILE_SIZE + 4,
+            py * TILE_SIZE + 4,
+            TILE_SIZE - 8,
+            TILE_SIZE - 8
+          );
+          this.buildRangeIndicator.lineStyle(2, 0x29b6f6, 0.5);
+          this.buildRangeIndicator.strokeRect(
+            px * TILE_SIZE + 4,
+            py * TILE_SIZE + 4,
+            TILE_SIZE - 8,
+            TILE_SIZE - 8
+          );
+        }
+      }
+    }
+
+    if (buildingType === 'greenhouse') {
+      const range = config.footprint.width - 1;
+      const cx = x + Math.floor(config.footprint.width / 2);
+      const cy = y + Math.floor(config.footprint.height / 2);
+      for (let dy = -(range + 1); dy <= range + 1; dy++) {
+        for (let dx = -(range + 1); dx <= range + 1; dx++) {
+          const px = cx + dx;
+          const py = cy + dy;
+          if (px < 0 || px >= GRID_WIDTH || py < 0 || py >= GRID_HEIGHT) continue;
+          this.buildRangeIndicator.fillStyle(0x81c784, 0.2);
+          this.buildRangeIndicator.fillRect(
+            px * TILE_SIZE + 6,
+            py * TILE_SIZE + 6,
+            TILE_SIZE - 12,
+            TILE_SIZE - 12
+          );
+          this.buildRangeIndicator.lineStyle(2, 0x66bb6a, 0.4);
+          this.buildRangeIndicator.strokeRect(
+            px * TILE_SIZE + 6,
+            py * TILE_SIZE + 6,
+            TILE_SIZE - 12,
+            TILE_SIZE - 12
+          );
+        }
+      }
+    }
+
+    this.buildPreviewSprite.setData('canPlace', isValid);
+  }
+
+  private clearBuildPreview() {
+    this.buildPreviewSprite.removeAll(true);
+    this.buildPreviewSprite.setVisible(false);
+    this.buildRangeIndicator.clear();
+  }
+
+  private refreshAllWithBuildings() {
+    this.refreshAllPlots();
+    this.renderBuildings();
+  }
+
   private setupInput() {
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
       const worldPoint = pointer.positionToCamera(this.cameras.main);
+    });
+
+    this.input.keyboard!.on('keydown-ESC', () => {
+      if (this.gameStore.selectedBuilding) {
+        this.gameStore.selectedBuilding = null;
+        this.clearBuildPreview();
+      }
     });
   }
 
@@ -272,6 +563,26 @@ export class FarmScene extends Phaser.Scene {
     this.refreshAllPlots();
     
     this.renderAnimals();
+
+    const buildingCount = this.gameStore.buildingCount;
+    const selectedBuilding = this.gameStore.selectedBuilding;
+    
+    if (buildingCount !== this.lastBuildingCount) {
+      this.renderBuildings();
+      this.lastBuildingCount = buildingCount;
+    }
+
+    if (selectedBuilding !== this.lastSelectedBuilding) {
+      if (!selectedBuilding) {
+        this.clearBuildPreview();
+      }
+      this.lastSelectedBuilding = selectedBuilding;
+    }
+
+    if (selectedBuilding && this.hoveredPlotX >= 0 && this.hoveredPlotY >= 0) {
+      this.updateBuildPreview(this.hoveredPlotX, this.hoveredPlotY);
+    }
+    
     this.checkSeason();
     if (now - this.lastSave > 10000) {
       this.gameStore.saveGame();

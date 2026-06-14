@@ -59,6 +59,21 @@ const seasonInfo = computed(() => {
         <span class="font-pixel text-xs text-farm-wood-dark">{{ gameStore.animalCount.cows }}</span>
       </div>
 
+      <div class="flex items-center gap-2">
+        <span class="text-xl">🏗️</span>
+        <span class="font-pixel text-xs text-farm-wood-dark">建筑:{{ gameStore.buildingCount }}</span>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <span class="text-xl">📦</span>
+        <span class="font-pixel text-xs text-farm-wood-dark">
+          容量:{{ gameStore.inventoryUsed }}/{{ gameStore.inventoryCapacity }}
+          <span v-if="gameStore.barnCapacityBonus > 0" class="text-farm-green-dark ml-1">
+            (+{{ gameStore.barnCapacityBonus }})
+          </span>
+        </span>
+      </div>
+
       <div class="flex items-center gap-2 pl-4 border-l-2 border-farm-wood-dark/30">
         <span class="text-xl">⭐</span>
         <div class="flex flex-col">

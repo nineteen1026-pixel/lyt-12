@@ -38,6 +38,15 @@ const selectSeed = (cropType: string) => {
   gameStore.selectSeed(cropType);
   showSeedSelector.value = false;
 };
+
+const toggleBuildingsPanel = () => {
+  if (gameStore.selectedBuilding) {
+    gameStore.selectedBuilding = null;
+  }
+  gameStore.showBuildings = !gameStore.showBuildings;
+  showSeedSelector.value = false;
+  gameStore.selectedTool = null;
+};
 </script>
 
 <template>
@@ -83,6 +92,15 @@ const selectSeed = (cropType: string) => {
       >
         {{ gameStore.activeOrderCount }}
       </span>
+    </div>
+
+    <div 
+      class="tool-btn flex flex-col items-center justify-center w-16 h-16 bg-farm-ui-dark border-3 border-farm-wood-dark cursor-pointer transition-all hover:bg-farm-gold hover:scale-105 active:scale-95"
+      :class="{ 'bg-farm-gold shadow-pixel-inset': gameStore.showBuildings || gameStore.selectedBuilding }"
+      @click="toggleBuildingsPanel"
+    >
+      <span class="text-2xl">🏗️</span>
+      <span class="font-pixel text-[8px] text-farm-wood-dark mt-1">建造</span>
     </div>
 
     <div 

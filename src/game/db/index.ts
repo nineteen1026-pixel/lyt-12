@@ -43,8 +43,9 @@ class GameDatabase {
 
   async saveGameState(state: GameState): Promise<void> {
     const db = this.ensureDB();
-    state.lastSaveTime = Date.now();
-    await db.put('gameState', state);
+    const clone = JSON.parse(JSON.stringify(state));
+    clone.lastSaveTime = Date.now();
+    await db.put('gameState', clone);
   }
 
   async getGameState(): Promise<GameState | undefined> {
@@ -54,14 +55,16 @@ class GameDatabase {
 
   async savePlot(plot: Plot): Promise<void> {
     const db = this.ensureDB();
-    await db.put('plots', plot);
+    const clone = JSON.parse(JSON.stringify(plot));
+    await db.put('plots', clone);
   }
 
   async saveAllPlots(plots: Plot[]): Promise<void> {
     const db = this.ensureDB();
+    const clones = JSON.parse(JSON.stringify(plots));
     const tx = db.transaction('plots', 'readwrite');
     await Promise.all([
-      ...plots.map(plot => tx.store.put(plot)),
+      ...clones.map((plot: Plot) => tx.store.put(plot)),
       tx.done
     ]);
   }
@@ -73,14 +76,16 @@ class GameDatabase {
 
   async saveAnimal(animal: Animal): Promise<void> {
     const db = this.ensureDB();
-    await db.put('animals', animal);
+    const clone = JSON.parse(JSON.stringify(animal));
+    await db.put('animals', clone);
   }
 
   async saveAllAnimals(animals: Animal[]): Promise<void> {
     const db = this.ensureDB();
+    const clones = JSON.parse(JSON.stringify(animals));
     const tx = db.transaction('animals', 'readwrite');
     await Promise.all([
-      ...animals.map(animal => tx.store.put(animal)),
+      ...clones.map((animal: Animal) => tx.store.put(animal)),
       tx.done
     ]);
   }
@@ -92,18 +97,20 @@ class GameDatabase {
 
   async saveInventoryItem(item: InventoryItem): Promise<void> {
     const db = this.ensureDB();
-    if (item.quantity <= 0) {
-      await db.delete('inventory', item.itemId);
+    const clone = JSON.parse(JSON.stringify(item));
+    if (clone.quantity <= 0) {
+      await db.delete('inventory', clone.itemId);
     } else {
-      await db.put('inventory', item);
+      await db.put('inventory', clone);
     }
   }
 
   async saveAllInventory(items: InventoryItem[]): Promise<void> {
     const db = this.ensureDB();
+    const clones = JSON.parse(JSON.stringify(items));
     const tx = db.transaction('inventory', 'readwrite');
     await Promise.all([
-      ...items.map(item => 
+      ...clones.map((item: InventoryItem) => 
         item.quantity <= 0 ? tx.store.delete(item.itemId) : tx.store.put(item)
       ),
       tx.done
@@ -117,14 +124,16 @@ class GameDatabase {
 
   async saveOrder(order: Order): Promise<void> {
     const db = this.ensureDB();
-    await db.put('orders', order);
+    const clone = JSON.parse(JSON.stringify(order));
+    await db.put('orders', clone);
   }
 
   async saveAllOrders(orders: Order[]): Promise<void> {
     const db = this.ensureDB();
+    const clones = JSON.parse(JSON.stringify(orders));
     const tx = db.transaction('orders', 'readwrite');
     await Promise.all([
-      ...orders.map(order => tx.store.put(order)),
+      ...clones.map((order: Order) => tx.store.put(order)),
       tx.done
     ]);
   }
@@ -141,14 +150,16 @@ class GameDatabase {
 
   async saveBuilding(building: Building): Promise<void> {
     const db = this.ensureDB();
-    await db.put('buildings', building);
+    const clone = JSON.parse(JSON.stringify(building));
+    await db.put('buildings', clone);
   }
 
   async saveAllBuildings(buildings: Building[]): Promise<void> {
     const db = this.ensureDB();
+    const clones = JSON.parse(JSON.stringify(buildings));
     const tx = db.transaction('buildings', 'readwrite');
     await Promise.all([
-      ...buildings.map(building => tx.store.put(building)),
+      ...clones.map((building: Building) => tx.store.put(building)),
       tx.done
     ]);
   }
