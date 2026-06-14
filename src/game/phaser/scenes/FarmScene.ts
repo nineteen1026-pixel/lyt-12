@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { useGameStore } from '../../stores/gameStore';
-import type { Plot } from '../../types/game';
-import { GRID_WIDTH, GRID_HEIGHT, TILE_SIZE } from '../../types/game';
+import type { Plot, WeatherType } from '../../types/game';
+import { GRID_WIDTH, GRID_HEIGHT, TILE_SIZE, DAY_DURATION } from '../../types/game';
 import { getCropConfig } from '../../data/crops';
 
 export class FarmScene extends Phaser.Scene {
@@ -10,9 +10,14 @@ export class FarmScene extends Phaser.Scene {
   private animalSprites: Map<string, Phaser.GameObjects.Container> = new Map();
   private highlightSprite!: Phaser.GameObjects.Image;
   private seasonOverlay!: Phaser.GameObjects.Image;
+  private weatherBarContainer!: Phaser.GameObjects.Container;
+  private weatherIcons: Map<string, Phaser.GameObjects.Container> = new Map();
+  private dayProgressBar!: Phaser.GameObjects.Graphics;
+  private weatherLabel!: Phaser.GameObjects.Text;
   private currentTime: number = 0;
   private lastUpdate: number = 0;
   private lastSave: number = 0;
+  private lastWeatherType: WeatherType | null = null;
 
   constructor() {
     super('FarmScene');
@@ -26,10 +31,18 @@ export class FarmScene extends Phaser.Scene {
     this.renderAnimals();
     this.setupInput();
     this.setupEventListeners();
+    this.renderWeatherBar();
     
     this.time.addEvent({
       delay: 1000,
       callback: this.onSecondTick,
+      callbackScope: this,
+      loop: true
+    });
+    
+    this.time.addEvent({
+      delay: 500,
+      callback: this.updateWeatherBar,
       callbackScope: this,
       loop: true
     });
@@ -121,6 +134,13 @@ export class FarmScene extends Phaser.Scene {
           readyGlow.fillStyle(0xffff00, 0.3);
           readyGlow.fillCircle(TILE_SIZE / 2, TILE_SIZE / 2, 20);
           container.add(readyGlow);
+        }
+
+        if (plot.crop.frozen) {
+          const frozenOverlay = this.add.image(0, 0, 'frozen_overlay');
+          frozenOverlay.setOrigin(0, 0);
+          frozenOverlay.setDepth(5);
+          container.add(frozenOverlay);
         }
       }
     }
@@ -262,5 +282,159 @@ export class FarmScene extends Phaser.Scene {
 
   update(_time: number, delta: number) {
     this.currentTime = this.currentTime || Date.now();
+  }
+
+  private renderWeatherBar() {
+    if (this.weatherBarContainer) {
+      this.weatherBarContainer.destroy();
+    }
+    this.weatherIcons.clear();
+
+    this.weatherBarContainer = this.add.container(0, 0);
+    this.weatherBarContainer.setDepth(200);
+
+    const bg = this.add.image(0, 0, 'weather_bar_bg');
+    bg.setOrigin(0, 0);
+    this.weatherBarContainer.add(bg);
+
+    const title = this.add.text(12, 18, '天气', {
+      fontFamily: 'Arial',
+      fontSize: '16px',
+      color: '#ffffff',
+      fontStyle: 'bold'
+    });
+    this.weatherBarContainer.add(title);
+
+    this.weatherLabel = this.add.text(52, 18, this.gameStore.weatherName, {
+      fontFamily: 'Arial',
+      fontSize: '16px',
+      color: '#ffd54f',
+      fontStyle: 'bold'
+    });
+    this.weatherBarContainer.add(this.weatherLabel);
+
+    const allWeathers: WeatherType[] = [this.gameStore.currentWeather, ...this.gameStore.weatherForecast];
+    const iconSize = 60;
+    const startX = 768 - (allWeathers.length * iconSize) - 12;
+    const labels = ['今日', '明日', '后日', '大后日'];
+
+    allWeathers.forEach((weather, index) => {
+      const iconContainer = this.add.container(startX + index * iconSize, 6);
+      
+      const frameTexture = index === 0 ? 'weather_frame_active' : 'weather_frame';
+      const frame = this.add.image(0, 0, frameTexture);
+      frame.setOrigin(0, 0);
+      iconContainer.add(frame);
+
+      const icon = this.add.image(6, 6, `weather_${weather}`);
+      icon.setOrigin(0, 0);
+      icon.setScale(1);
+      iconContainer.add(icon);
+
+      const label = this.add.text(30, 50, labels[index] || '', {
+        fontFamily: 'Arial',
+        fontSize: '10px',
+        color: index === 0 ? '#ffd54f' : '#cccccc',
+        align: 'center'
+      });
+      label.setOrigin(0.5, 0);
+      label.setX(30);
+      iconContainer.add(label);
+
+      if (index === 0) {
+        iconContainer.setData('active', true);
+      }
+
+      this.weatherIcons.set(`weather_${index}`, iconContainer);
+      this.weatherBarContainer.add(iconContainer);
+    });
+
+    this.dayProgressBar = this.add.graphics();
+    this.weatherBarContainer.add(this.dayProgressBar);
+    this.updateDayProgress();
+
+    this.lastWeatherType = this.gameStore.currentWeather;
+  }
+
+  private updateWeatherBar() {
+    if (!this.gameStore.isInitialized || !this.weatherBarContainer) return;
+
+    const currentWeather = this.gameStore.currentWeather;
+    const forecast = this.gameStore.weatherForecast;
+    const allWeathers: WeatherType[] = [currentWeather, ...forecast];
+    const labels = ['今日', '明日', '后日', '大后日'];
+
+    let needsRebuild = false;
+    if (this.lastWeatherType !== currentWeather) {
+      needsRebuild = true;
+    }
+    this.weatherIcons.forEach((container, key) => {
+      const index = parseInt(key.split('_')[1]);
+      if (index < allWeathers.length) {
+        const icon = container.getAt(1) as Phaser.GameObjects.Image;
+        if (icon && icon.texture.key !== `weather_${allWeathers[index]}`) {
+          needsRebuild = true;
+        }
+      }
+    });
+
+    if (needsRebuild) {
+      this.renderWeatherBar();
+    }
+
+    this.weatherIcons.forEach((container, key) => {
+      const index = parseInt(key.split('_')[1]);
+      if (index === 0) {
+        const pulse = Math.sin(Date.now() / 300) * 0.03 + 1;
+        container.setScale(pulse);
+      }
+    });
+
+    if (this.weatherLabel) {
+      this.weatherLabel.setText(this.gameStore.weatherName);
+    }
+
+    this.updateDayProgress();
+  }
+
+  private updateDayProgress() {
+    if (!this.dayProgressBar || !this.gameStore.weather) return;
+
+    this.dayProgressBar.clear();
+
+    const progress = this.gameStore.weather.getDayProgress(this.currentTime || Date.now());
+    const barX = 12;
+    const barY = 42;
+    const barWidth = 180;
+    const barHeight = 8;
+
+    this.dayProgressBar.fillStyle(0x000000, 0.5);
+    this.dayProgressBar.fillRect(barX, barY, barWidth, barHeight);
+
+    const progressColor = this.getProgressColor(progress);
+    this.dayProgressBar.fillStyle(progressColor, 1);
+    this.dayProgressBar.fillRect(barX, barY, barWidth * progress, barHeight);
+
+    this.dayProgressBar.lineStyle(1, 0xffffff, 0.5);
+    this.dayProgressBar.strokeRect(barX, barY, barWidth, barHeight);
+
+    const dayLabel = this.gameStore.day ? `第${this.gameStore.day}天` : '';
+    const existingText = this.weatherBarContainer.getAt(this.weatherBarContainer.length - 1);
+    if (existingText && existingText.type === 'Text' && (existingText as Phaser.GameObjects.Text).text.includes('天')) {
+      this.weatherBarContainer.removeAt(this.weatherBarContainer.length - 1, true);
+    }
+    const dayText = this.add.text(barX + barWidth + 8, barY - 2, dayLabel, {
+      fontFamily: 'Arial',
+      fontSize: '12px',
+      color: '#ffffff'
+    });
+    this.weatherBarContainer.add(dayText);
+  }
+
+  private getProgressColor(progress: number): number {
+    if (progress < 0.25) return 0x90caf9;
+    if (progress < 0.5) return 0xffd54f;
+    if (progress < 0.75) return 0xffb74d;
+    return 0xef5350;
   }
 }

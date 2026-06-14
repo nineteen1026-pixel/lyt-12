@@ -86,6 +86,13 @@ export class CropGrowth {
       return 0;
     }
 
+    if (crop.frozen) {
+      const elapsed = crop.lastGrowthCheck - crop.plantedAt;
+      const growthMultiplier = crop.watered ? 1 : 0.5;
+      const effectiveGrowth = elapsed * growthMultiplier;
+      return Math.min(1, effectiveGrowth / config.growthTime);
+    }
+
     const elapsed = currentTime - crop.plantedAt;
     const growthMultiplier = crop.watered ? 1 : 0.5;
     const effectiveGrowth = elapsed * growthMultiplier;
@@ -110,6 +117,10 @@ export class CropGrowth {
   updateCropGrowth(x: number, y: number, currentTime: number): { grew: boolean; becameReady: boolean } {
     const plot = this.getPlot(x, y);
     if (!plot || !plot.crop || plot.state === 'ready') {
+      return { grew: false, becameReady: false };
+    }
+
+    if (plot.crop.frozen) {
       return { grew: false, becameReady: false };
     }
 

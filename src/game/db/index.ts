@@ -106,7 +106,13 @@ class GameDatabase {
     const state: GameState = {
       ...INITIAL_GAME_STATE,
       lastSaveTime: now,
-      lastSeasonAdvance: now
+      lastSeasonAdvance: now,
+      weather: {
+        current: 'sunny',
+        forecast: [],
+        lastWeatherChange: now,
+        lastDayWeather: now
+      }
     };
 
     const plots: Plot[] = [];
@@ -149,6 +155,16 @@ class GameDatabase {
     const state = await this.getGameState();
     if (!state) {
       return null;
+    }
+
+    if (!state.weather) {
+      const now = Date.now();
+      state.weather = {
+        current: 'sunny',
+        forecast: [],
+        lastWeatherChange: now,
+        lastDayWeather: now
+      };
     }
 
     const plots = await this.getAllPlots();

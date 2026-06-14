@@ -37,5 +37,11 @@ export const INITIAL_GAME_STATE: GameState = {
   season: 'spring',
   day: 1,
   lastSaveTime: Date.now(),
-  lastSeasonAdvance: Date.now()
+  lastSeasonAdvance: Date.now(),
+  weather: {
+    current: 'sunny',
+    forecast: [],
+    lastWeatherChange: Date.now(),
+    lastDayWeather: Date.now()
+  }
 };

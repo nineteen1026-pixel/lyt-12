@@ -10,6 +10,8 @@ export class PixelTextureGenerator {
     this.generateCropSprites(scene);
     this.generateAnimalSprites(scene);
     this.generateSeasonsOverlay(scene);
+    this.generateWeatherIcons(scene);
+    this.generateFrozenOverlay(scene);
   }
 
   private static generateGrass(scene: Phaser.Scene) {
@@ -297,5 +299,163 @@ export class PixelTextureGenerator {
     winter.fillRect(0, 0, width, height);
     winter.generateTexture('season_winter', width, height);
     winter.destroy();
+  }
+
+  private static generateWeatherIcons(scene: Phaser.Scene) {
+    const size = 48;
+
+    this.generateSunnyIcon(scene, size);
+    this.generateRainyIcon(scene, size);
+    this.generateSnowyIcon(scene, size);
+    this.generateStormyIcon(scene, size);
+    this.generateWeatherBg(scene, size);
+  }
+
+  private static generateSunnyIcon(scene: Phaser.Scene, size: number) {
+    const graphics = scene.make.graphics({ add: false });
+
+    graphics.fillStyle(0xffd54f);
+    graphics.fillCircle(size / 2, size / 2, 12);
+
+    graphics.lineStyle(3, 0xffd54f);
+    for (let i = 0; i < 8; i++) {
+      const angle = (i * Math.PI) / 4;
+      const cx = size / 2;
+      const cy = size / 2;
+      graphics.beginPath();
+      graphics.moveTo(cx + Math.cos(angle) * 14, cy + Math.sin(angle) * 14);
+      graphics.lineTo(cx + Math.cos(angle) * 20, cy + Math.sin(angle) * 20);
+      graphics.strokePath();
+    }
+
+    graphics.fillStyle(0xffffff, 0.3);
+    graphics.fillCircle(size / 2 - 5, size / 2 - 5, 4);
+
+    graphics.generateTexture('weather_sunny', size, size);
+    graphics.destroy();
+  }
+
+  private static generateRainyIcon(scene: Phaser.Scene, size: number) {
+    const graphics = scene.make.graphics({ add: false });
+
+    graphics.fillStyle(0x90a4ae);
+    graphics.fillEllipse(size / 2 - 6, size / 2 - 6, 18, 12);
+    graphics.fillEllipse(size / 2 + 4, size / 2 - 8, 16, 10);
+    graphics.fillEllipse(size / 2, size / 2 - 2, 22, 10);
+
+    graphics.fillStyle(0x64b5f6);
+    for (let i = 0; i < 5; i++) {
+      const rx = Phaser.Math.Between(size / 2 - 12, size / 2 + 12);
+      const ry = size / 2 + 4 + i * 3;
+      graphics.fillTriangle(rx, ry, rx - 2, ry - 4, rx + 2, ry - 4);
+    }
+
+    graphics.generateTexture('weather_rainy', size, size);
+    graphics.destroy();
+  }
+
+  private static generateSnowyIcon(scene: Phaser.Scene, size: number) {
+    const graphics = scene.make.graphics({ add: false });
+
+    graphics.fillStyle(0xb0bec5);
+    graphics.fillEllipse(size / 2 - 6, size / 2 - 6, 18, 12);
+    graphics.fillEllipse(size / 2 + 4, size / 2 - 8, 16, 10);
+    graphics.fillEllipse(size / 2, size / 2 - 2, 22, 10);
+
+    graphics.fillStyle(0xffffff);
+    for (let i = 0; i < 6; i++) {
+      const sx = Phaser.Math.Between(size / 2 - 14, size / 2 + 14);
+      const sy = size / 2 + 2 + i * 3;
+      graphics.fillCircle(sx, sy, 2);
+    }
+
+    graphics.generateTexture('weather_snowy', size, size);
+    graphics.destroy();
+  }
+
+  private static generateStormyIcon(scene: Phaser.Scene, size: number) {
+    const graphics = scene.make.graphics({ add: false });
+
+    graphics.fillStyle(0x546e7a);
+    graphics.fillEllipse(size / 2 - 6, size / 2 - 8, 18, 12);
+    graphics.fillEllipse(size / 2 + 4, size / 2 - 10, 16, 10);
+    graphics.fillEllipse(size / 2, size / 2 - 4, 22, 10);
+
+    graphics.fillStyle(0x455a64);
+    for (let i = 0; i < 4; i++) {
+      const rx = Phaser.Math.Between(size / 2 - 12, size / 2 + 12);
+      const ry = size / 2 + 2 + i * 3;
+      graphics.fillTriangle(rx, ry, rx - 2, ry - 4, rx + 2, ry - 4);
+    }
+
+    graphics.fillStyle(0xffeb3b);
+    graphics.fillTriangle(
+      size / 2 - 2, size / 2 - 2,
+      size / 2 - 8, size / 2 + 10,
+      size / 2 + 4, size / 2 + 2
+    );
+    graphics.fillTriangle(
+      size / 2 + 2, size / 2 + 2,
+      size / 2 - 4, size / 2 + 14,
+      size / 2 + 8, size / 2 + 6
+    );
+
+    graphics.generateTexture('weather_stormy', size, size);
+    graphics.destroy();
+  }
+
+  private static generateWeatherBg(scene: Phaser.Scene, size: number) {
+    const width = 768;
+    const height = 60;
+    const graphics = scene.make.graphics({ add: false });
+
+    graphics.fillStyle(0x000000, 0.5);
+    graphics.fillRect(0, 0, width, height);
+    graphics.generateTexture('weather_bar_bg', width, height);
+    graphics.destroy();
+
+    const frame = scene.make.graphics({ add: false });
+    const frameSize = size + 12;
+    frame.fillStyle(0xffffff, 0.15);
+    frame.lineStyle(2, 0xffffff, 0.5);
+    frame.fillRect(0, 0, frameSize, frameSize);
+    frame.strokeRect(0, 0, frameSize, frameSize);
+    frame.generateTexture('weather_frame', frameSize, frameSize);
+    frame.destroy();
+
+    const activeFrame = scene.make.graphics({ add: false });
+    activeFrame.fillStyle(0xffd54f, 0.2);
+    activeFrame.lineStyle(3, 0xffd54f, 0.8);
+    activeFrame.fillRect(0, 0, frameSize, frameSize);
+    activeFrame.strokeRect(0, 0, frameSize, frameSize);
+    activeFrame.generateTexture('weather_frame_active', frameSize, frameSize);
+    activeFrame.destroy();
+  }
+
+  private static generateFrozenOverlay(scene: Phaser.Scene) {
+    const size = 64;
+    const graphics = scene.make.graphics({ add: false });
+
+    graphics.fillStyle(0x81d4fa, 0.4);
+    graphics.fillRect(4, 4, size - 8, size - 8);
+
+    graphics.lineStyle(2, 0x4fc3f7, 0.8);
+    for (let i = 0; i < 5; i++) {
+      const sx = Phaser.Math.Between(6, size - 10);
+      const sy = Phaser.Math.Between(6, size - 10);
+      graphics.beginPath();
+      graphics.moveTo(sx, sy - 3);
+      graphics.lineTo(sx - 3, sy);
+      graphics.lineTo(sx, sy + 3);
+      graphics.lineTo(sx + 3, sy);
+      graphics.closePath();
+      graphics.strokePath();
+    }
+
+    graphics.lineStyle(1, 0xb3e5fc, 0.6);
+    graphics.strokeRect(6, 6, size - 12, size - 12);
+
+    graphics.generateTexture('frozen_overlay', size, size);
+    graphics.destroy();
   }
 }

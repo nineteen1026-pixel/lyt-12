@@ -1,11 +1,13 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { GameState, Plot, Animal, InventoryItem, ToolType, Season } from '../types/game';
+import type { GameState, Plot, Animal, InventoryItem, ToolType, Season, WeatherType, WeatherState } from '../types/game';
 import { MapGrid } from '../modules/MapGrid';
 import { CropGrowth } from '../modules/CropGrowth';
 import { Livestock } from '../modules/Livestock';
 import { Inventory } from '../modules/Inventory';
 import { Shop } from '../modules/Shop';
+import { Weather } from '../modules/Weather';
+import type { WeatherEffects } from '../modules/Weather';
 import { gameDB } from '../db';
 import { getItem } from '../data/items';
 import { getCropConfig } from '../data/crops';
@@ -17,6 +19,7 @@ export const useGameStore = defineStore('game', () => {
   const livestock = ref<Livestock | null>(null);
   const inventory = ref<Inventory | null>(null);
   const shop = ref<Shop | null>(null);
+  const weather = ref<Weather | null>(null);
   const selectedTool = ref<ToolType>(null);
   const selectedSeed = ref<string | null>(null);
   const showInventory = ref(false);
@@ -29,6 +32,9 @@ export const useGameStore = defineStore('game', () => {
   const day = computed(() => mapGrid.value?.getDay() ?? 1);
   const unlockedPlots = computed(() => mapGrid.value?.getUnlockedCount() ?? 0);
   const animalCount = computed(() => livestock.value?.getAnimalCount() ?? { chickens: 0, cows: 0 });
+  const currentWeather = computed(() => weather.value?.getCurrent() ?? 'sunny');
+  const weatherForecast = computed(() => weather.value?.getForecast() ?? []);
+  const weatherName = computed(() => weather.value?.getWeatherName(currentWeather.value) ?? '晴天');
 
   let notificationId = 0;
 
@@ -61,6 +67,7 @@ export const useGameStore = defineStore('game', () => {
       cropGrowth.value = new CropGrowth(mapGrid.value.getPlotGrid());
       livestock.value = new Livestock(savedGame.animals);
       inventory.value = new Inventory(savedGame.inventory);
+      weather.value = new Weather(savedGame.state.weather, savedGame.state.season);
       shop.value = new Shop(
         inventory.value,
         mapGrid.value,
@@ -72,29 +79,51 @@ export const useGameStore = defineStore('game', () => {
       const offlineMs = now - savedGame.state.lastSaveTime;
       
       if (offlineMs > 0) {
+        const weatherHistory = weather.value.processOfflineWeather(offlineMs, now);
+        if (weatherHistory.length > 0) {
+          const weatherEffects = weather.value.applyWeatherHistory(
+            mapGrid.value.getPlotGrid(),
+            weatherHistory,
+            savedGame.state.lastSaveTime,
+            now
+          );
+          notifyWeatherEffects(weatherEffects, true);
+        }
+
         const cropUpdates = cropGrowth.value.processOfflineGrowth(offlineMs, now);
         const animalUpdates = livestock.value.processOfflineProduction(offlineMs, now);
         const seasonUpdate = mapGrid.value.updateSeason(now);
         
-        if (cropUpdates.length > 0 || animalUpdates.length > 0 || seasonUpdate.advanced) {
-          let offlineMsg = '离线期间：';
-          if (cropUpdates.some(u => u.becameReady)) {
-            offlineMsg += `${cropUpdates.filter(u => u.becameReady).length}个作物成熟，`;
-          }
-          if (animalUpdates.length > 0) {
-            offlineMsg += `${animalUpdates.length}只动物产出产品，`;
-          }
-          if (seasonUpdate.advanced) {
-            offlineMsg += `进入${getSeasonName(seasonUpdate.newSeason!)}，`;
-          }
-          if (offlineMsg.length > 5) {
-            addNotification(offlineMsg.slice(0, -1), 'info');
-          }
+        if (seasonUpdate.advanced && mapGrid.value) {
+          weather.value.setSeason(mapGrid.value.getSeason());
+        }
+
+        let offlineMsg = '离线期间：';
+        let hasContent = false;
+        if (weatherHistory.length > 0) {
+          offlineMsg += `经过${weatherHistory.length}天，`;
+          hasContent = true;
+        }
+        if (cropUpdates.some(u => u.becameReady)) {
+          offlineMsg += `${cropUpdates.filter(u => u.becameReady).length}个作物成熟，`;
+          hasContent = true;
+        }
+        if (animalUpdates.length > 0) {
+          offlineMsg += `${animalUpdates.length}只动物产出产品，`;
+          hasContent = true;
+        }
+        if (seasonUpdate.advanced) {
+          offlineMsg += `进入${getSeasonName(seasonUpdate.newSeason!)}，`;
+          hasContent = true;
+        }
+        if (hasContent) {
+          addNotification(offlineMsg.slice(0, -1), 'info');
         }
         
         gameState.value.lastSeasonAdvance = mapGrid.value.getLastSeasonAdvance();
         gameState.value.season = mapGrid.value.getSeason();
         gameState.value.day = mapGrid.value.getDay();
+        gameState.value.weather = weather.value.getState();
       }
     } else {
       const newGame = await gameDB.initializeNewGame();
@@ -108,6 +137,11 @@ export const useGameStore = defineStore('game', () => {
       cropGrowth.value = new CropGrowth(mapGrid.value.getPlotGrid());
       livestock.value = new Livestock(newGame.animals);
       inventory.value = new Inventory(newGame.inventory);
+      weather.value = new Weather(newGame.state.weather, newGame.state.season);
+      if (weather.value.getForecast().length === 0) {
+        const forecast = weather.value.generateForecast(3);
+        gameState.value.weather.forecast = forecast;
+      }
       shop.value = new Shop(
         inventory.value,
         mapGrid.value,
@@ -120,8 +154,25 @@ export const useGameStore = defineStore('game', () => {
     isInitialized.value = true;
   }
 
+  function notifyWeatherEffects(effects: WeatherEffects, isOffline: boolean = false) {
+    const parts: string[] = [];
+    if (effects.wateredPlots > 0) {
+      parts.push(`${effects.wateredPlots}块地被雨水浇灌`);
+    }
+    if (effects.frozenCrops > 0) {
+      parts.push(`${effects.frozenCrops}株作物被冻结`);
+    }
+    if (effects.destroyedCrops > 0) {
+      parts.push(`${effects.destroyedCrops}株作物被雷暴摧毁`);
+    }
+    if (parts.length > 0) {
+      const prefix = isOffline ? '离线期间' : '天气变化';
+      addNotification(`${prefix}：${parts.join('，')}`, 'info');
+    }
+  }
+
   async function saveGame() {
-    if (!gameState.value || !mapGrid.value || !livestock.value || !inventory.value || !shop.value) {
+    if (!gameState.value || !mapGrid.value || !livestock.value || !inventory.value || !shop.value || !weather.value) {
       return;
     }
 
@@ -129,6 +180,7 @@ export const useGameStore = defineStore('game', () => {
     gameState.value.season = mapGrid.value.getSeason();
     gameState.value.day = mapGrid.value.getDay();
     gameState.value.lastSeasonAdvance = mapGrid.value.getLastSeasonAdvance();
+    gameState.value.weather = weather.value.getState();
 
     await gameDB.saveCompleteGame(
       gameState.value,
@@ -302,13 +354,21 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function updateGame(time: number) {
-    if (!mapGrid.value || !cropGrowth.value || !livestock.value) {
+    if (!mapGrid.value || !cropGrowth.value || !livestock.value || !weather.value) {
       return;
+    }
+
+    const weatherUpdate = weather.value.advanceDay(time);
+    if (weatherUpdate.changed && weatherUpdate.newWeather) {
+      addNotification(`今日天气：${weather.value.getWeatherName(weatherUpdate.newWeather)}！`, 'info');
+      const effects = weather.value.applyWeatherEffects(mapGrid.value.getPlotGrid(), time);
+      notifyWeatherEffects(effects, false);
     }
 
     const seasonUpdate = mapGrid.value.updateSeason(time);
     if (seasonUpdate.advanced) {
       addNotification(`季节变换：进入${getSeasonName(seasonUpdate.newSeason!)}！`, 'info');
+      weather.value.setSeason(seasonUpdate.newSeason!);
     }
 
     cropGrowth.value.updateAllCrops(time);
@@ -332,6 +392,7 @@ export const useGameStore = defineStore('game', () => {
     livestock,
     inventory,
     shop,
+    weather,
     selectedTool,
     selectedSeed,
     showInventory,
@@ -343,6 +404,9 @@ export const useGameStore = defineStore('game', () => {
     day,
     unlockedPlots,
     animalCount,
+    currentWeather,
+    weatherForecast,
+    weatherName,
     initGame,
     saveGame,
     useTool,

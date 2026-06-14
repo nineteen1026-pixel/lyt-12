@@ -4,11 +4,14 @@ export type Season = 'spring' | 'summer' | 'autumn' | 'winter';
 
 export type ToolType = 'hoe' | 'water' | 'hand' | null;
 
+export type WeatherType = 'sunny' | 'rainy' | 'snowy' | 'stormy';
+
 export interface Crop {
   type: string;
   plantedAt: number;
   watered: boolean;
   lastGrowthCheck: number;
+  frozen?: boolean;
 }
 
 export interface Plot {
@@ -17,6 +20,13 @@ export interface Plot {
   state: PlotState;
   unlocked: boolean;
   crop?: Crop;
+}
+
+export interface WeatherState {
+  current: WeatherType;
+  forecast: WeatherType[];
+  lastWeatherChange: number;
+  lastDayWeather: number;
 }
 
 export interface Animal {
@@ -65,6 +75,7 @@ export interface GameState {
   day: number;
   lastSaveTime: number;
   lastSeasonAdvance: number;
+  weather: WeatherState;
 }
 
 export interface InventoryItem {
@@ -77,3 +88,5 @@ export const GRID_HEIGHT = 8;
 export const TILE_SIZE = 64;
 export const INITIAL_UNLOCKED = 9;
 export const SEASON_DURATION = 60000;
+export const DAY_DURATION = 15000;
+export const STORM_DESTROY_CHANCE = 0.2;
