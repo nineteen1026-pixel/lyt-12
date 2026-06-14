@@ -79,6 +79,13 @@ export const useGameStore = defineStore('game', () => {
       const offlineMs = now - savedGame.state.lastSaveTime;
       
       if (offlineMs > 0) {
+        const seasonUpdate = mapGrid.value.updateSeason(now);
+        if (seasonUpdate.advanced) {
+          weather.value.setSeason(mapGrid.value.getSeason());
+          const newForecast = weather.value.generateForecast(3);
+          weather.value.getState().forecast = newForecast;
+        }
+
         const weatherHistory = weather.value.processOfflineWeather(offlineMs, now);
         if (weatherHistory.length > 0) {
           const weatherEffects = weather.value.applyWeatherHistory(
@@ -92,11 +99,6 @@ export const useGameStore = defineStore('game', () => {
 
         const cropUpdates = cropGrowth.value.processOfflineGrowth(offlineMs, now);
         const animalUpdates = livestock.value.processOfflineProduction(offlineMs, now);
-        const seasonUpdate = mapGrid.value.updateSeason(now);
-        
-        if (seasonUpdate.advanced && mapGrid.value) {
-          weather.value.setSeason(mapGrid.value.getSeason());
-        }
 
         let offlineMsg = '离线期间：';
         let hasContent = false;
@@ -358,17 +360,22 @@ export const useGameStore = defineStore('game', () => {
       return;
     }
 
+    const seasonUpdate = mapGrid.value.updateSeason(time);
+    if (seasonUpdate.advanced) {
+      addNotification(`季节变换：进入${getSeasonName(seasonUpdate.newSeason!)}！`, 'info');
+      weather.value.setSeason(seasonUpdate.newSeason!);
+      const newForecast = weather.value.generateForecast(3);
+      weather.value.getState().forecast = newForecast;
+      if (seasonUpdate.newDay) {
+        gameState.value!.day = seasonUpdate.newDay;
+      }
+    }
+
     const weatherUpdate = weather.value.advanceDay(time);
     if (weatherUpdate.changed && weatherUpdate.newWeather) {
       addNotification(`今日天气：${weather.value.getWeatherName(weatherUpdate.newWeather)}！`, 'info');
       const effects = weather.value.applyWeatherEffects(mapGrid.value.getPlotGrid(), time);
       notifyWeatherEffects(effects, false);
-    }
-
-    const seasonUpdate = mapGrid.value.updateSeason(time);
-    if (seasonUpdate.advanced) {
-      addNotification(`季节变换：进入${getSeasonName(seasonUpdate.newSeason!)}！`, 'info');
-      weather.value.setSeason(seasonUpdate.newSeason!);
     }
 
     cropGrowth.value.updateAllCrops(time);

@@ -14,10 +14,12 @@ export class FarmScene extends Phaser.Scene {
   private weatherIcons: Map<string, Phaser.GameObjects.Container> = new Map();
   private dayProgressBar!: Phaser.GameObjects.Graphics;
   private weatherLabel!: Phaser.GameObjects.Text;
+  private dayText!: Phaser.GameObjects.Text;
   private currentTime: number = 0;
   private lastUpdate: number = 0;
   private lastSave: number = 0;
   private lastWeatherType: WeatherType | null = null;
+  private lastForecast: WeatherType[] = [];
 
   constructor() {
     super('FarmScene');
@@ -229,7 +231,11 @@ export class FarmScene extends Phaser.Scene {
   private refreshAllPlots() {
     if (this.gameStore.mapGrid) {
       const plots = this.gameStore.mapGrid.getAllPlots();
-      plots.forEach(plot => this.renderPlot(plot));
+      plots.forEach(plot => {
+        if (plot.unlocked) {
+          this.renderPlot(plot);
+        }
+      });
     }
   }
 
@@ -243,15 +249,15 @@ export class FarmScene extends Phaser.Scene {
     });
   }
 
-  private setupEventListeners() {
-    const checkSeason = () => {
-      if (this.seasonOverlay && this.gameStore.season) {
-        const season = this.gameStore.season;
-        this.seasonOverlay.setTexture(`season_${season}`);
-        this.cameras.main.setBackgroundColor(this.getSeasonBgColor(season));
-      }
-    };
+  private checkSeason() {
+    if (this.seasonOverlay && this.gameStore.season) {
+      const season = this.gameStore.season;
+      this.seasonOverlay.setTexture(`season_${season}`);
+      this.cameras.main.setBackgroundColor(this.getSeasonBgColor(season));
+    }
+  }
 
+  private setupEventListeners() {
     this.events.on('shutdown', () => {
       this.gameStore.saveGame();
     });
@@ -263,17 +269,10 @@ export class FarmScene extends Phaser.Scene {
     
     this.gameStore.updateGame(now);
     
-    if (this.gameStore.mapGrid) {
-      const plots = this.gameStore.mapGrid.getAllPlots();
-      plots.forEach(plot => {
-        if (plot.crop && plot.unlocked) {
-          this.renderPlot(plot);
-        }
-      });
-    }
+    this.refreshAllPlots();
     
     this.renderAnimals();
-    checkSeason();
+    this.checkSeason();
     if (now - this.lastSave > 10000) {
       this.gameStore.saveGame();
       this.lastSave = now;
@@ -351,9 +350,21 @@ export class FarmScene extends Phaser.Scene {
 
     this.dayProgressBar = this.add.graphics();
     this.weatherBarContainer.add(this.dayProgressBar);
+
+    const barX = 12;
+    const barY = 42;
+    const barWidth = 180;
+    this.dayText = this.add.text(barX + barWidth + 8, barY - 2, '', {
+      fontFamily: 'Arial',
+      fontSize: '12px',
+      color: '#ffffff'
+    });
+    this.weatherBarContainer.add(this.dayText);
+
     this.updateDayProgress();
 
     this.lastWeatherType = this.gameStore.currentWeather;
+    this.lastForecast = [...this.gameStore.weatherForecast];
   }
 
   private updateWeatherBar() {
@@ -364,22 +375,43 @@ export class FarmScene extends Phaser.Scene {
     const allWeathers: WeatherType[] = [currentWeather, ...forecast];
     const labels = ['今日', '明日', '后日', '大后日'];
 
-    let needsRebuild = false;
-    if (this.lastWeatherType !== currentWeather) {
-      needsRebuild = true;
-    }
-    this.weatherIcons.forEach((container, key) => {
-      const index = parseInt(key.split('_')[1]);
-      if (index < allWeathers.length) {
-        const icon = container.getAt(1) as Phaser.GameObjects.Image;
-        if (icon && icon.texture.key !== `weather_${allWeathers[index]}`) {
-          needsRebuild = true;
-        }
-      }
-    });
+    const forecastChanged = forecast.length !== this.lastForecast.length ||
+      forecast.some((w, i) => w !== this.lastForecast[i]);
+    const weatherChanged = this.lastWeatherType !== currentWeather;
 
-    if (needsRebuild) {
-      this.renderWeatherBar();
+    if (weatherChanged || forecastChanged) {
+      this.weatherIcons.forEach((container, key) => {
+        const index = parseInt(key.split('_')[1]);
+        if (index < allWeathers.length) {
+          const frame = container.getAt(0) as Phaser.GameObjects.Image;
+          const icon = container.getAt(1) as Phaser.GameObjects.Image;
+          const label = container.getAt(2) as Phaser.GameObjects.Text;
+
+          if (frame) {
+            const frameTexture = index === 0 ? 'weather_frame_active' : 'weather_frame';
+            if (frame.texture.key !== frameTexture) {
+              frame.setTexture(frameTexture);
+            }
+          }
+
+          if (icon) {
+            const iconTexture = `weather_${allWeathers[index]}`;
+            if (icon.texture.key !== iconTexture) {
+              icon.setTexture(iconTexture);
+            }
+          }
+
+          if (label) {
+            const labelColor = index === 0 ? '#ffd54f' : '#cccccc';
+            label.setColor(labelColor);
+          }
+
+          container.setData('active', index === 0);
+        }
+      });
+
+      this.lastWeatherType = currentWeather;
+      this.lastForecast = [...forecast];
     }
 
     this.weatherIcons.forEach((container, key) => {
@@ -387,6 +419,8 @@ export class FarmScene extends Phaser.Scene {
       if (index === 0) {
         const pulse = Math.sin(Date.now() / 300) * 0.03 + 1;
         container.setScale(pulse);
+      } else {
+        container.setScale(1);
       }
     });
 
@@ -419,16 +453,9 @@ export class FarmScene extends Phaser.Scene {
     this.dayProgressBar.strokeRect(barX, barY, barWidth, barHeight);
 
     const dayLabel = this.gameStore.day ? `第${this.gameStore.day}天` : '';
-    const existingText = this.weatherBarContainer.getAt(this.weatherBarContainer.length - 1);
-    if (existingText && existingText.type === 'Text' && (existingText as Phaser.GameObjects.Text).text.includes('天')) {
-      this.weatherBarContainer.removeAt(this.weatherBarContainer.length - 1, true);
+    if (this.dayText) {
+      this.dayText.setText(dayLabel);
     }
-    const dayText = this.add.text(barX + barWidth + 8, barY - 2, dayLabel, {
-      fontFamily: 'Arial',
-      fontSize: '12px',
-      color: '#ffffff'
-    });
-    this.weatherBarContainer.add(dayText);
   }
 
   private getProgressColor(progress: number): number {
