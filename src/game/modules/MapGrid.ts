@@ -1,19 +1,29 @@
-import type { Plot, Season, PlotState } from '../types/game';
+import type { Plot, Season, PlotState, Building } from '../types/game';
 import { GRID_WIDTH, GRID_HEIGHT, SEASON_DURATION } from '../types/game';
 
 const SEASONS: Season[] = ['spring', 'summer', 'autumn', 'winter'];
+
+export interface MapGridBuildingsAccess {
+  isPlotOccupied(x: number, y: number): boolean;
+}
 
 export class MapGrid {
   private plots: Plot[][];
   private season: Season;
   private day: number;
   private lastSeasonAdvance: number;
+  private buildings: MapGridBuildingsAccess | null = null;
 
-  constructor(plots: Plot[], season: Season, day: number, lastSeasonAdvance: number) {
+  constructor(plots: Plot[], season: Season, day: number, lastSeasonAdvance: number, buildings: MapGridBuildingsAccess | null = null) {
     this.plots = this.initPlotGrid(plots);
     this.season = season;
     this.day = day;
     this.lastSeasonAdvance = lastSeasonAdvance;
+    this.buildings = buildings;
+  }
+
+  setBuildings(buildings: MapGridBuildingsAccess): void {
+    this.buildings = buildings;
   }
 
   private initPlotGrid(plots: Plot[]): Plot[][] {
@@ -53,6 +63,9 @@ export class MapGrid {
     if (!plot || !plot.unlocked || plot.state !== 'empty') {
       return false;
     }
+    if (this.buildings?.isPlotOccupied(x, y)) {
+      return false;
+    }
     plot.state = 'tilled';
     return true;
   }
@@ -60,6 +73,9 @@ export class MapGrid {
   setPlotState(x: number, y: number, state: PlotState): boolean {
     const plot = this.getPlot(x, y);
     if (!plot || !plot.unlocked) {
+      return false;
+    }
+    if (this.buildings?.isPlotOccupied(x, y)) {
       return false;
     }
     plot.state = state;

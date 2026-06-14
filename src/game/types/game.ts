@@ -6,6 +6,32 @@ export type ToolType = 'hoe' | 'water' | 'hand' | null;
 
 export type WeatherType = 'sunny' | 'rainy' | 'snowy' | 'stormy';
 
+export type BuildingType = 'sprinkler' | 'greenhouse' | 'barn';
+
+export interface BuildingConfig {
+  id: BuildingType;
+  name: string;
+  description: string;
+  icon: string;
+  price: number;
+  footprint: { width: number; height: number };
+  unlockPlotCount: number;
+  effect: {
+    sprinklerRange?: number;
+    greenhouseSeasons?: Season[];
+    barnCapacityBonus?: number;
+    barnPreventSpoilage?: boolean;
+  };
+}
+
+export interface Building {
+  id: string;
+  type: BuildingType;
+  x: number;
+  y: number;
+  builtAt: number;
+}
+
 export interface Crop {
   type: string;
   plantedAt: number;
@@ -20,6 +46,7 @@ export interface Plot {
   state: PlotState;
   unlocked: boolean;
   crop?: Crop;
+  buildingId?: string;
 }
 
 export interface WeatherState {
@@ -124,6 +151,7 @@ export interface GameState {
 export interface InventoryItem {
   itemId: string;
   quantity: number;
+  addedAt?: number;
 }
 
 export const GRID_WIDTH = 12;
@@ -133,3 +161,6 @@ export const INITIAL_UNLOCKED = 9;
 export const SEASON_DURATION = 60000;
 export const DAY_DURATION = 15000;
 export const STORM_DESTROY_CHANCE = 0.2;
+export const DEFAULT_INVENTORY_CAPACITY = 50;
+export const BARN_CAPACITY_BONUS = 100;
+export const SPOILAGE_DURATION = 300000;

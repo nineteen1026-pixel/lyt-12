@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { GameState, Plot, Animal, InventoryItem, ToolType, Season, WeatherType, WeatherState, Order } from '../types/game';
+import type { GameState, Plot, Animal, InventoryItem, ToolType, Season, WeatherType, WeatherState, Order, Building, BuildingType, BuildingConfig } from '../types/game';
 import { MapGrid } from '../modules/MapGrid';
 import { CropGrowth } from '../modules/CropGrowth';
 import { Livestock } from '../modules/Livestock';
@@ -9,10 +9,12 @@ import { Shop } from '../modules/Shop';
 import { Weather } from '../modules/Weather';
 import type { WeatherEffects } from '../modules/Weather';
 import { Orders } from '../modules/Orders';
+import { Buildings } from '../modules/Buildings';
 import { gameDB } from '../db';
 import { getItem } from '../data/items';
 import { getCropConfig } from '../data/crops';
 import { getVillagerById, getReputationLevel } from '../data/orders';
+import { getBuildingConfig } from '../data/buildings';
 
 export const useGameStore = defineStore('game', () => {
   const gameState = ref<GameState | null>(null);
@@ -23,11 +25,14 @@ export const useGameStore = defineStore('game', () => {
   const shop = ref<Shop | null>(null);
   const weather = ref<Weather | null>(null);
   const orders = ref<Orders | null>(null);
+  const buildings = ref<Buildings | null>(null);
   const selectedTool = ref<ToolType>(null);
   const selectedSeed = ref<string | null>(null);
+  const selectedBuilding = ref<BuildingType | null>(null);
   const showInventory = ref(false);
   const showShop = ref(false);
   const showOrders = ref(false);
+  const showBuildings = ref(false);
   const isInitialized = ref(false);
   const notifications = ref<Array<{ id: number; message: string; type: 'success' | 'error' | 'info' }>>([]);
 
@@ -43,6 +48,12 @@ export const useGameStore = defineStore('game', () => {
   const reputationLevelInfo = computed(() => getReputationLevel(reputation.value.score));
   const activeOrders = computed(() => orders.value?.getActiveOrders() ?? []);
   const activeOrderCount = computed(() => orders.value?.getActiveOrderCount() ?? 0);
+  const inventoryCapacity = computed(() => inventory.value?.getCapacity() ?? 50);
+  const inventoryUsed = computed(() => inventory.value?.getTotalQuantity() ?? 0);
+  const buildingList = computed(() => buildings.value?.getBuildings() ?? []);
+  const buildingCount = computed(() => buildingList.value.length);
+  const hasBarn = computed(() => buildings.value?.hasBarn() ?? false);
+  const barnCapacityBonus = computed(() => buildings.value?.getBarnCapacityBonus() ?? 0);
 
   let notificationId = 0;
 
@@ -71,16 +82,20 @@ export const useGameStore = defineStore('game', () => {
         savedGame.state.day,
         savedGame.state.lastSeasonAdvance
       );
+
+      buildings.value = new Buildings(savedGame.buildings, mapGrid.value.getPlotGrid());
+      mapGrid.value.setBuildings(buildings.value);
       
-      cropGrowth.value = new CropGrowth(mapGrid.value.getPlotGrid());
+      cropGrowth.value = new CropGrowth(mapGrid.value.getPlotGrid(), buildings.value);
       livestock.value = new Livestock(savedGame.animals);
-      inventory.value = new Inventory(savedGame.inventory);
-      weather.value = new Weather(savedGame.state.weather, savedGame.state.season);
+      inventory.value = new Inventory(savedGame.inventory, buildings.value);
+      weather.value = new Weather(savedGame.state.weather, savedGame.state.season, buildings.value);
       shop.value = new Shop(
         inventory.value,
         mapGrid.value,
         livestock.value,
-        savedGame.state.coins
+        savedGame.state.coins,
+        buildings.value
       );
 
       orders.value = new Orders(
@@ -96,6 +111,14 @@ export const useGameStore = defineStore('game', () => {
       const offlineMs = now - savedGame.state.lastSaveTime;
       
       if (offlineMs > 0) {
+        const spoiledItems = inventory.value.processSpoilage(now);
+        if (spoiledItems.length > 0) {
+          for (const spoiled of spoiledItems) {
+            const item = getItem(spoiled.itemId);
+            addNotification(`${item?.name || '物品'} x${spoiled.quantity} 已腐坏`, 'error');
+          }
+        }
+
         const seasonUpdate = mapGrid.value.updateSeason(now);
         if (seasonUpdate.advanced) {
           weather.value.setSeason(mapGrid.value.getSeason());
@@ -147,6 +170,10 @@ export const useGameStore = defineStore('game', () => {
           offlineMsg += `${expiredOrders.length}个订单超时违约，`;
           hasContent = true;
         }
+        if (spoiledItems.length > 0) {
+          offlineMsg += `${spoiledItems.length}种物品腐坏，`;
+          hasContent = true;
+        }
         if (hasContent) {
           addNotification(offlineMsg.slice(0, -1), 'info');
         }
@@ -179,10 +206,14 @@ export const useGameStore = defineStore('game', () => {
         newGame.state.day,
         newGame.state.lastSeasonAdvance
       );
-      cropGrowth.value = new CropGrowth(mapGrid.value.getPlotGrid());
+
+      buildings.value = new Buildings(newGame.buildings, mapGrid.value.getPlotGrid());
+      mapGrid.value.setBuildings(buildings.value);
+
+      cropGrowth.value = new CropGrowth(mapGrid.value.getPlotGrid(), buildings.value);
       livestock.value = new Livestock(newGame.animals);
-      inventory.value = new Inventory(newGame.inventory);
-      weather.value = new Weather(newGame.state.weather, newGame.state.season);
+      inventory.value = new Inventory(newGame.inventory, buildings.value);
+      weather.value = new Weather(newGame.state.weather, newGame.state.season, buildings.value);
       if (weather.value.getForecast().length === 0) {
         const forecast = weather.value.generateForecast(3);
         gameState.value.weather.forecast = forecast;
@@ -191,7 +222,8 @@ export const useGameStore = defineStore('game', () => {
         inventory.value,
         mapGrid.value,
         livestock.value,
-        newGame.state.coins
+        newGame.state.coins,
+        buildings.value
       );
 
       orders.value = new Orders(
@@ -221,11 +253,17 @@ export const useGameStore = defineStore('game', () => {
     if (effects.wateredPlots > 0) {
       parts.push(`${effects.wateredPlots}块地被雨水浇灌`);
     }
+    if (effects.sprinklerWatered > 0) {
+      parts.push(`洒水器浇灌了${effects.sprinklerWatered}块地`);
+    }
     if (effects.frozenCrops > 0) {
       parts.push(`${effects.frozenCrops}株作物被冻结`);
     }
     if (effects.destroyedCrops > 0) {
       parts.push(`${effects.destroyedCrops}株作物被雷暴摧毁`);
+    }
+    if (effects.greenhouseProtected > 0) {
+      parts.push(`温室保护了${effects.greenhouseProtected}株作物`);
     }
     if (parts.length > 0) {
       const prefix = isOffline ? '离线期间' : '天气变化';
@@ -234,7 +272,7 @@ export const useGameStore = defineStore('game', () => {
   }
 
   async function saveGame() {
-    if (!gameState.value || !mapGrid.value || !livestock.value || !inventory.value || !shop.value || !weather.value || !orders.value) {
+    if (!gameState.value || !mapGrid.value || !livestock.value || !inventory.value || !shop.value || !weather.value || !orders.value || !buildings.value) {
       return;
     }
 
@@ -250,28 +288,59 @@ export const useGameStore = defineStore('game', () => {
       mapGrid.value.getAllPlots(),
       livestock.value.getAnimals(),
       inventory.value.getInventoryItems(),
-      orders.value.getOrders()
+      orders.value.getOrders(),
+      buildings.value.getBuildings()
     );
   }
 
   function useTool(tool: ToolType) {
     selectedTool.value = tool;
     selectedSeed.value = null;
+    selectedBuilding.value = null;
+  }
+
+  function selectBuilding(buildingType: BuildingType) {
+    selectedBuilding.value = buildingType;
+    selectedTool.value = null;
+    selectedSeed.value = null;
   }
 
   function selectSeed(cropType: string) {
     selectedSeed.value = cropType;
     selectedTool.value = 'hand';
+    selectedBuilding.value = null;
   }
 
   function handlePlotClick(x: number, y: number) {
-    if (!mapGrid.value || !cropGrowth.value || !inventory.value || !shop.value || !gameState.value) {
+    if (!mapGrid.value || !cropGrowth.value || !inventory.value || !shop.value || !gameState.value || !buildings.value) {
+      return;
+    }
+
+    if (selectedBuilding.value) {
+      const result = shop.value.buyBuilding(selectedBuilding.value, x, y);
+      if (result.success) {
+        const config = getBuildingConfig(selectedBuilding.value);
+        gameState.value.coins = shop.value.getCoins();
+        addNotification(`建造${config?.name}成功！`, 'success');
+        saveGame();
+      } else {
+        addNotification(result.message || '建造失败！', 'error');
+      }
       return;
     }
 
     const plot = mapGrid.value.getPlot(x, y);
     if (!plot || !plot.unlocked) {
       addNotification('这块地还没解锁哦！', 'error');
+      return;
+    }
+
+    if (plot.buildingId) {
+      const building = buildings.value.getBuilding(plot.buildingId);
+      if (building) {
+        const config = getBuildingConfig(building.type);
+        addNotification(`这里建造了${config?.name}，点击建筑管理面板可拆除`, 'info');
+      }
       return;
     }
 
@@ -434,8 +503,16 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function updateGame(time: number) {
-    if (!mapGrid.value || !cropGrowth.value || !livestock.value || !weather.value || !orders.value || !gameState.value || !shop.value) {
+    if (!mapGrid.value || !cropGrowth.value || !livestock.value || !weather.value || !orders.value || !gameState.value || !shop.value || !inventory.value) {
       return;
+    }
+
+    const spoiledItems = inventory.value.processSpoilage(time);
+    if (spoiledItems.length > 0) {
+      for (const spoiled of spoiledItems) {
+        const item = getItem(spoiled.itemId);
+        addNotification(`${item?.name || '物品'} x${spoiled.quantity} 已腐坏`, 'error');
+      }
     }
 
     const seasonUpdate = mapGrid.value.updateSeason(time);
@@ -546,6 +623,37 @@ export const useGameStore = defineStore('game', () => {
     return result;
   }
 
+  function demolishBuilding(buildingId: string) {
+    if (!shop.value || !gameState.value) {
+      return { success: false, message: '系统未初始化' };
+    }
+    const result = shop.value.demolishBuilding(buildingId);
+    if (result.success) {
+      gameState.value.coins = shop.value.getCoins();
+      const msg = result.refund ? `拆除成功！返还${result.refund}金币` : '拆除成功！';
+      addNotification(msg, 'success');
+      saveGame();
+    } else {
+      addNotification(result.message || '拆除失败！', 'error');
+    }
+    return result;
+  }
+
+  function canPlaceBuilding(type: BuildingType, x: number, y: number) {
+    if (!shop.value) return { canPlace: false, reason: '系统未初始化' };
+    return shop.value.canPlaceBuilding(type, x, y);
+  }
+
+  function getBuyableBuildings() {
+    if (!shop.value) return [];
+    return shop.value.getBuyableBuildings();
+  }
+
+  function getBuildingAtPlot(x: number, y: number) {
+    if (!buildings.value) return undefined;
+    return buildings.value.getBuildingByPlot(x, y);
+  }
+
   function getSeasonName(s: Season): string {
     const names: Record<Season, string> = {
       spring: '春季',
@@ -565,11 +673,14 @@ export const useGameStore = defineStore('game', () => {
     shop,
     weather,
     orders,
+    buildings,
     selectedTool,
     selectedSeed,
+    selectedBuilding,
     showInventory,
     showShop,
     showOrders,
+    showBuildings,
     isInitialized,
     notifications,
     coins,
@@ -584,10 +695,17 @@ export const useGameStore = defineStore('game', () => {
     reputationLevelInfo,
     activeOrders,
     activeOrderCount,
+    inventoryCapacity,
+    inventoryUsed,
+    buildingList,
+    buildingCount,
+    hasBarn,
+    barnCapacityBonus,
     initGame,
     saveGame,
     useTool,
     selectSeed,
+    selectBuilding,
     handlePlotClick,
     handleAnimalClick,
     buyItem,
@@ -599,6 +717,10 @@ export const useGameStore = defineStore('game', () => {
     submitOrder,
     canSubmitOrder,
     getOrderRemainingDays,
-    refreshOrdersNow
+    refreshOrdersNow,
+    demolishBuilding,
+    canPlaceBuilding,
+    getBuyableBuildings,
+    getBuildingAtPlot
   };
 });

@@ -1,8 +1,8 @@
-import type { GameState, Plot, Animal, InventoryItem, Order, ReputationState } from '../types/game';
+import type { GameState, Plot, Animal, InventoryItem, Order, ReputationState, Building } from '../types/game';
 
 export const DB_CONFIG = {
   name: 'PixelFarmDB',
-  version: 2
+  version: 3
 };
 
 export interface DBStores {
@@ -11,6 +11,7 @@ export interface DBStores {
   animals: Animal;
   inventory: InventoryItem;
   orders: Order;
+  buildings: Building;
 }
 
 export const STORE_CONFIGS = [
@@ -36,6 +37,10 @@ export const STORE_CONFIGS = [
     indexes: [
       { name: 'status', keyPath: 'status' }
     ]
+  },
+  {
+    name: 'buildings',
+    keyPath: 'id'
   }
 ];
 

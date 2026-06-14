@@ -1,10 +1,12 @@
-import type { Item } from '../types/game';
+import type { Item, BuildingType, BuildingConfig } from '../types/game';
 import { getItem, getBuyableSeeds, getBuyableAnimals } from '../data/items';
 import { getCropConfig } from '../data/crops';
 import { getAnimalConfig } from '../data/animals';
+import { getBuildingConfig, getUnlockedBuildings } from '../data/buildings';
 import type { Inventory } from './Inventory';
 import type { MapGrid } from './MapGrid';
 import type { Livestock } from './Livestock';
+import type { Buildings } from './Buildings';
 
 export interface InventoryAccess {
   addItem(itemId: string, quantity: number): boolean;
@@ -17,23 +19,43 @@ export interface MapGridAccess {
   getNextUnlockablePlot(): { x: number; y: number } | null;
   getUnlockPrice(x: number, y: number): number;
   unlockPlot(x: number, y: number): boolean;
+  getUnlockedCount(): number;
 }
 
 export interface LivestockAccess {
   addAnimal(type: 'chicken' | 'cow'): boolean;
 }
 
+export interface BuildingsAccess {
+  canPlaceBuilding(type: BuildingType, x: number, y: number): { canPlace: boolean; reason?: string };
+  placeBuilding(type: BuildingType, x: number, y: number): { id: string; type: BuildingType; x: number; y: number; builtAt: number } | null;
+  removeBuilding(id: string): boolean;
+  getBuildings(): Array<{ id: string; type: BuildingType; x: number; y: number; builtAt: number }>;
+}
+
 export class Shop {
   private inventory: InventoryAccess;
   private mapGrid: MapGridAccess;
   private livestock: LivestockAccess;
+  private buildings: BuildingsAccess | null;
   private coins: number;
 
-  constructor(inventory: InventoryAccess, mapGrid: MapGridAccess, livestock: LivestockAccess, coins: number) {
+  constructor(
+    inventory: InventoryAccess,
+    mapGrid: MapGridAccess,
+    livestock: LivestockAccess,
+    coins: number,
+    buildings: BuildingsAccess | null = null
+  ) {
     this.inventory = inventory;
     this.mapGrid = mapGrid;
     this.livestock = livestock;
     this.coins = coins;
+    this.buildings = buildings;
+  }
+
+  setBuildings(buildings: BuildingsAccess): void {
+    this.buildings = buildings;
   }
 
   getCoins(): number {
@@ -196,5 +218,103 @@ export class Shop {
   canExpandPlot(): boolean {
     const price = this.getExpandPlotPrice();
     return price > 0 && this.coins >= price;
+  }
+
+  getBuyableBuildings(): Array<{ building: BuildingConfig; unlocked: boolean; canAfford: boolean }> {
+    const unlockedCount = this.mapGrid.getUnlockedCount();
+    const unlockedBuildings = getUnlockedBuildings(unlockedCount);
+    const allBuildings: BuildingConfig[] = [];
+    
+    for (const type of ['sprinkler', 'greenhouse', 'barn'] as BuildingType[]) {
+      const config = getBuildingConfig(type);
+      if (config) allBuildings.push(config);
+    }
+
+    return allBuildings.map(building => ({
+      building,
+      unlocked: unlockedBuildings.some(b => b.id === building.id),
+      canAfford: this.coins >= building.price
+    }));
+  }
+
+  canPlaceBuilding(type: BuildingType, x: number, y: number): { canPlace: boolean; reason?: string } {
+    if (!this.buildings) {
+      return { canPlace: false, reason: '建筑系统未初始化' };
+    }
+
+    const config = getBuildingConfig(type);
+    if (!config) {
+      return { canPlace: false, reason: '建筑类型不存在' };
+    }
+
+    const unlockedCount = this.mapGrid.getUnlockedCount();
+    if (unlockedCount < config.unlockPlotCount) {
+      return { canPlace: false, reason: `需要解锁${config.unlockPlotCount}块地块后才能建造` };
+    }
+
+    if (this.coins < config.price) {
+      return { canPlace: false, reason: '金币不足' };
+    }
+
+    return this.buildings.canPlaceBuilding(type, x, y);
+  }
+
+  buyBuilding(type: BuildingType, x: number, y: number): { success: boolean; message?: string; buildingId?: string } {
+    if (!this.buildings) {
+      return { success: false, message: '建筑系统未初始化' };
+    }
+
+    const canPlace = this.canPlaceBuilding(type, x, y);
+    if (!canPlace.canPlace) {
+      return { success: false, message: canPlace.reason };
+    }
+
+    const config = getBuildingConfig(type);
+    if (!config) {
+      return { success: false, message: '建筑类型不存在' };
+    }
+
+    if (!this.spendCoins(config.price)) {
+      return { success: false, message: '金币不足' };
+    }
+
+    const building = this.buildings.placeBuilding(type, x, y);
+    if (!building) {
+      this.addCoins(config.price);
+      return { success: false, message: '建造失败' };
+    }
+
+    return { success: true, buildingId: building.id };
+  }
+
+  demolishBuilding(buildingId: string): { success: boolean; message?: string; refund?: number } {
+    if (!this.buildings) {
+      return { success: false, message: '建筑系统未初始化' };
+    }
+
+    const buildings = this.buildings.getBuildings();
+    const building = buildings.find(b => b.id === buildingId);
+    if (!building) {
+      return { success: false, message: '建筑不存在' };
+    }
+
+    if (!this.buildings.removeBuilding(buildingId)) {
+      return { success: false, message: '拆除失败' };
+    }
+
+    const config = getBuildingConfig(building.type);
+    const refund = config ? Math.floor(config.price * 0.5) : 0;
+    this.addCoins(refund);
+
+    return { success: true, refund };
+  }
+
+  getBuildingPrice(type: BuildingType): number {
+    const config = getBuildingConfig(type);
+    return config?.price ?? -1;
+  }
+
+  canBuyBuilding(type: BuildingType, x: number, y: number): boolean {
+    return this.canPlaceBuilding(type, x, y).canPlace;
   }
 }

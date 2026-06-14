@@ -1,6 +1,6 @@
 import { openDB, IDBPDatabase } from 'idb';
 import { DB_CONFIG, STORE_CONFIGS, INITIAL_GAME_STATE, INITIAL_REPUTATION, type DBStores } from './schema';
-import type { GameState, Plot, Animal, InventoryItem, Order } from '../types/game';
+import type { GameState, Plot, Animal, InventoryItem, Order, Building } from '../types/game';
 import { GRID_WIDTH, GRID_HEIGHT, INITIAL_UNLOCKED } from '../types/game';
 
 class GameDatabase {
@@ -25,8 +25,6 @@ class GameDatabase {
             if ((config as any).indexes) {
               (config as any).indexes.forEach((idx: any) => {
                 if (!store.indexNames.contains(idx.name)) {
-                  // Cannot create indexes on existing store within versionchange in readonly mode
-                  // This is safe because orders store didn't exist in v1
                 }
               });
             }
@@ -141,7 +139,35 @@ class GameDatabase {
     await db.delete('orders', orderId);
   }
 
-  async initializeNewGame(): Promise<{ state: GameState; plots: Plot[]; animals: Animal[]; inventory: InventoryItem[]; orders: Order[] }> {
+  async saveBuilding(building: Building): Promise<void> {
+    const db = this.ensureDB();
+    await db.put('buildings', building);
+  }
+
+  async saveAllBuildings(buildings: Building[]): Promise<void> {
+    const db = this.ensureDB();
+    const tx = db.transaction('buildings', 'readwrite');
+    await Promise.all([
+      ...buildings.map(building => tx.store.put(building)),
+      tx.done
+    ]);
+  }
+
+  async getAllBuildings(): Promise<Building[]> {
+    const db = this.ensureDB();
+    try {
+      return await db.getAll('buildings');
+    } catch (e) {
+      return [];
+    }
+  }
+
+  async deleteBuilding(buildingId: string): Promise<void> {
+    const db = this.ensureDB();
+    await db.delete('buildings', buildingId);
+  }
+
+  async initializeNewGame(): Promise<{ state: GameState; plots: Plot[]; animals: Animal[]; inventory: InventoryItem[]; orders: Order[]; buildings: Building[] }> {
     const now = Date.now();
     const state: GameState = {
       ...INITIAL_GAME_STATE,
@@ -186,17 +212,19 @@ class GameDatabase {
       { itemId: 'potato_seed', quantity: 3 }
     ];
     const orders: Order[] = [];
+    const buildings: Building[] = [];
 
     await this.saveGameState(state);
     await this.saveAllPlots(plots);
     await this.saveAllAnimals(animals);
     await this.saveAllInventory(inventory);
     await this.saveAllOrders(orders);
+    await this.saveAllBuildings(buildings);
 
-    return { state, plots, animals, inventory, orders };
+    return { state, plots, animals, inventory, orders, buildings };
   }
 
-  async loadGame(): Promise<{ state: GameState; plots: Plot[]; animals: Animal[]; inventory: InventoryItem[]; orders: Order[] } | null> {
+  async loadGame(): Promise<{ state: GameState; plots: Plot[]; animals: Animal[]; inventory: InventoryItem[]; orders: Order[]; buildings: Building[] } | null> {
     const state = await this.getGameState();
     if (!state) {
       return null;
@@ -229,16 +257,18 @@ class GameDatabase {
     } catch (e) {
       orders = [];
     }
+    const buildings = await this.getAllBuildings();
 
-    return { state, plots, animals, inventory, orders };
+    return { state, plots, animals, inventory, orders, buildings };
   }
 
-  async saveCompleteGame(state: GameState, plots: Plot[], animals: Animal[], inventory: InventoryItem[], orders: Order[]): Promise<void> {
+  async saveCompleteGame(state: GameState, plots: Plot[], animals: Animal[], inventory: InventoryItem[], orders: Order[], buildings: Building[]): Promise<void> {
     await this.saveGameState(state);
     await this.saveAllPlots(plots);
     await this.saveAllAnimals(animals);
     await this.saveAllInventory(inventory);
     await this.saveAllOrders(orders);
+    await this.saveAllBuildings(buildings);
   }
 
   async clearAll(): Promise<void> {

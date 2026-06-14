@@ -10,19 +10,32 @@ const SEASON_WEATHER_WEIGHTS: Record<Season, Record<WeatherType, number>> = {
   winter: { sunny: 3, rainy: 2, snowy: 4, stormy: 1 }
 };
 
+export interface WeatherBuildingsAccess {
+  getSprinklerWateredPlots(): Array<{ x: number; y: number }>;
+  isGreenhousePlot(x: number, y: number): boolean;
+}
+
 export interface WeatherEffects {
   wateredPlots: number;
   frozenCrops: number;
   destroyedCrops: number;
+  sprinklerWatered: number;
+  greenhouseProtected: number;
 }
 
 export class Weather {
   private state: WeatherState;
   private season: Season;
+  private buildings: WeatherBuildingsAccess | null = null;
 
-  constructor(weatherState: WeatherState, season: Season) {
+  constructor(weatherState: WeatherState, season: Season, buildings: WeatherBuildingsAccess | null = null) {
     this.state = weatherState;
     this.season = season;
+    this.buildings = buildings;
+  }
+
+  setBuildings(buildings: WeatherBuildingsAccess): void {
+    this.buildings = buildings;
   }
 
   getCurrent(): WeatherType {
@@ -110,15 +123,28 @@ export class Weather {
     const effects: WeatherEffects = {
       wateredPlots: 0,
       frozenCrops: 0,
-      destroyedCrops: 0
+      destroyedCrops: 0,
+      sprinklerWatered: 0,
+      greenhouseProtected: 0
     };
 
     const weather = this.state.current;
+
+    const sprinklerPlots = this.buildings?.getSprinklerWateredPlots() ?? [];
+    for (const { x, y } of sprinklerPlots) {
+      const plot = plots[y]?.[x];
+      if (plot && plot.unlocked) {
+        const watered = this.waterPlot(plot);
+        if (watered) effects.sprinklerWatered++;
+      }
+    }
 
     for (let y = 0; y < plots.length; y++) {
       for (let x = 0; x < plots[y].length; x++) {
         const plot = plots[y][x];
         if (!plot.unlocked) continue;
+
+        const isGreenhouseProtected = this.buildings?.isGreenhousePlot(x, y) ?? false;
 
         if (weather === 'rainy' || weather === 'stormy') {
           const watered = this.waterPlot(plot);
@@ -127,9 +153,13 @@ export class Weather {
 
         if (weather === 'snowy') {
           if (plot.crop && !plot.crop.frozen) {
-            plot.crop.frozen = true;
-            plot.crop.lastGrowthCheck = currentTime;
-            effects.frozenCrops++;
+            if (isGreenhouseProtected) {
+              effects.greenhouseProtected++;
+            } else {
+              plot.crop.frozen = true;
+              plot.crop.lastGrowthCheck = currentTime;
+              effects.frozenCrops++;
+            }
           }
         } else {
           if (plot.crop && plot.crop.frozen) {
@@ -139,8 +169,14 @@ export class Weather {
         }
 
         if (weather === 'stormy') {
-          const destroyed = this.tryDestroyCrop(plot, currentTime);
-          if (destroyed) effects.destroyedCrops++;
+          if (isGreenhouseProtected) {
+            if (plot.crop && plot.state !== 'ready') {
+              effects.greenhouseProtected++;
+            }
+          } else {
+            const destroyed = this.tryDestroyCrop(plot, currentTime);
+            if (destroyed) effects.destroyedCrops++;
+          }
         }
       }
     }
@@ -157,7 +193,9 @@ export class Weather {
     const totalEffects: WeatherEffects = {
       wateredPlots: 0,
       frozenCrops: 0,
-      destroyedCrops: 0
+      destroyedCrops: 0,
+      sprinklerWatered: 0,
+      greenhouseProtected: 0
     };
 
     if (weatherHistory.length === 0) {
@@ -176,6 +214,8 @@ export class Weather {
       totalEffects.wateredPlots += effects.wateredPlots;
       totalEffects.frozenCrops += effects.frozenCrops;
       totalEffects.destroyedCrops += effects.destroyedCrops;
+      totalEffects.sprinklerWatered += effects.sprinklerWatered;
+      totalEffects.greenhouseProtected += effects.greenhouseProtected;
     });
 
     this.state.current = originalWeather;

@@ -1,11 +1,21 @@
 import type { Plot, Crop, Season } from '../types/game';
 import { getCropConfig } from '../data/crops';
 
+export interface CropGrowthBuildingsAccess {
+  getGreenhouseAllowedSeasons(x: number, y: number): Season[] | null;
+}
+
 export class CropGrowth {
   private plots: Plot[][];
+  private buildings: CropGrowthBuildingsAccess | null = null;
 
-  constructor(plotGrid: Plot[][]) {
+  constructor(plotGrid: Plot[][], buildings: CropGrowthBuildingsAccess | null = null) {
     this.plots = plotGrid;
+    this.buildings = buildings;
+  }
+
+  setBuildings(buildings: CropGrowthBuildingsAccess): void {
+    this.buildings = buildings;
   }
 
   plantSeed(x: number, y: number, cropType: string, season: Season): boolean {
@@ -22,8 +32,15 @@ export class CropGrowth {
       return false;
     }
 
-    if (!config.seasons.includes(season)) {
-      return false;
+    const allowedSeasons = this.buildings?.getGreenhouseAllowedSeasons(x, y);
+    if (allowedSeasons) {
+      if (!allowedSeasons.includes(season) && !config.seasons.includes(season)) {
+        return false;
+      }
+    } else {
+      if (!config.seasons.includes(season)) {
+        return false;
+      }
     }
 
     const now = Date.now();

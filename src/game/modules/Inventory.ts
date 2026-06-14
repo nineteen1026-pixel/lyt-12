@@ -1,27 +1,80 @@
 import type { InventoryItem } from '../types/game';
+import { DEFAULT_INVENTORY_CAPACITY, SPOILAGE_DURATION } from '../types/game';
 import { getItem } from '../data/items';
 
-export class Inventory {
-  private items: Map<string, number>;
+export interface InventoryBuildingsAccess {
+  getBarnCapacityBonus(): number;
+  preventSpoilage(): boolean;
+}
 
-  constructor(inventoryItems: InventoryItem[]) {
+export interface SpoiledItem {
+  itemId: string;
+  quantity: number;
+}
+
+export class Inventory {
+  private items: Map<string, { quantity: number; addedAt: number }>;
+  private buildings: InventoryBuildingsAccess | null = null;
+  private baseCapacity: number = DEFAULT_INVENTORY_CAPACITY;
+
+  constructor(inventoryItems: InventoryItem[], buildings: InventoryBuildingsAccess | null = null) {
     this.items = new Map();
+    this.buildings = buildings;
+    const now = Date.now();
     for (const item of inventoryItems) {
       if (item.quantity > 0) {
-        this.items.set(item.itemId, item.quantity);
+        this.items.set(item.itemId, {
+          quantity: item.quantity,
+          addedAt: item.addedAt ?? now
+        });
       }
     }
   }
 
+  setBuildings(buildings: InventoryBuildingsAccess): void {
+    this.buildings = buildings;
+  }
+
+  getCapacity(): number {
+    const bonus = this.buildings?.getBarnCapacityBonus() ?? 0;
+    return this.baseCapacity + bonus;
+  }
+
+  getBaseCapacity(): number {
+    return this.baseCapacity;
+  }
+
+  getTotalQuantity(): number {
+    let total = 0;
+    this.items.forEach(entry => {
+      total += entry.quantity;
+    });
+    return total;
+  }
+
+  getAvailableSpace(): number {
+    return this.getCapacity() - this.getTotalQuantity();
+  }
+
   getItems(): Map<string, number> {
-    return new Map(this.items);
+    const result = new Map<string, number>();
+    this.items.forEach((entry, itemId) => {
+      if (entry.quantity > 0) {
+        result.set(itemId, entry.quantity);
+      }
+    });
+    return result;
   }
 
   getInventoryItems(): InventoryItem[] {
     const items: InventoryItem[] = [];
-    this.items.forEach((quantity, itemId) => {
-      if (quantity > 0) {
-        items.push({ itemId, quantity });
+    this.items.forEach((entry, itemId) => {
+      if (entry.quantity > 0) {
+        items.push({
+          itemId,
+          quantity: entry.quantity,
+          addedAt: entry.addedAt
+        });
       }
     });
     return items;
@@ -37,8 +90,19 @@ export class Inventory {
       return false;
     }
 
-    const current = this.items.get(itemId) || 0;
-    this.items.set(itemId, current + quantity);
+    const available = this.getAvailableSpace();
+    if (quantity > available) {
+      return false;
+    }
+
+    const now = Date.now();
+    const current = this.items.get(itemId);
+    if (current) {
+      current.quantity += quantity;
+      current.addedAt = now;
+    } else {
+      this.items.set(itemId, { quantity, addedAt: now });
+    }
     return true;
   }
 
@@ -47,37 +111,74 @@ export class Inventory {
       return false;
     }
 
-    const current = this.items.get(itemId) || 0;
-    if (current < quantity) {
+    const current = this.items.get(itemId);
+    if (!current || current.quantity < quantity) {
       return false;
     }
 
-    const newQuantity = current - quantity;
+    const newQuantity = current.quantity - quantity;
     if (newQuantity <= 0) {
       this.items.delete(itemId);
     } else {
-      this.items.set(itemId, newQuantity);
+      current.quantity = newQuantity;
     }
 
     return true;
   }
 
   hasItem(itemId: string, quantity: number = 1): boolean {
-    const current = this.items.get(itemId) || 0;
-    return current >= quantity;
+    const current = this.items.get(itemId);
+    return current !== undefined && current.quantity >= quantity;
   }
 
   getItemCount(itemId: string): number {
-    return this.items.get(itemId) || 0;
+    return this.items.get(itemId)?.quantity ?? 0;
+  }
+
+  processSpoilage(currentTime: number): SpoiledItem[] {
+    const spoiled: SpoiledItem[] = [];
+    const preventSpoilage = this.buildings?.preventSpoilage() ?? false;
+
+    if (preventSpoilage) {
+      return spoiled;
+    }
+
+    const toDelete: string[] = [];
+
+    this.items.forEach((entry, itemId) => {
+      const item = getItem(itemId);
+      if (!item || item.type !== 'product') {
+        return;
+      }
+
+      if (itemId === 'egg' || itemId === 'milk') {
+        return;
+      }
+
+      const age = currentTime - entry.addedAt;
+      if (age >= SPOILAGE_DURATION && entry.quantity > 0) {
+        spoiled.push({
+          itemId,
+          quantity: entry.quantity
+        });
+        toDelete.push(itemId);
+      }
+    });
+
+    for (const itemId of toDelete) {
+      this.items.delete(itemId);
+    }
+
+    return spoiled;
   }
 
   getSeeds(): Array<{ itemId: string; quantity: number; cropType: string }> {
     const seeds: Array<{ itemId: string; quantity: number; cropType: string }> = [];
     
-    this.items.forEach((quantity, itemId) => {
-      if (itemId.endsWith('_seed') && quantity > 0) {
+    this.items.forEach((entry, itemId) => {
+      if (itemId.endsWith('_seed') && entry.quantity > 0) {
         const cropType = itemId.replace('_seed', '');
-        seeds.push({ itemId, quantity, cropType });
+        seeds.push({ itemId, quantity: entry.quantity, cropType });
       }
     });
 
@@ -87,10 +188,10 @@ export class Inventory {
   getProducts(): Array<{ itemId: string; quantity: number }> {
     const products: Array<{ itemId: string; quantity: number }> = [];
     
-    this.items.forEach((quantity, itemId) => {
+    this.items.forEach((entry, itemId) => {
       if (itemId.endsWith('_product') || itemId === 'egg' || itemId === 'milk') {
-        if (quantity > 0) {
-          products.push({ itemId, quantity });
+        if (entry.quantity > 0) {
+          products.push({ itemId, quantity: entry.quantity });
         }
       }
     });
@@ -101,12 +202,12 @@ export class Inventory {
   getSellableItems(): Array<{ itemId: string; quantity: number; sellPrice: number }> {
     const sellable: Array<{ itemId: string; quantity: number; sellPrice: number }> = [];
 
-    this.items.forEach((quantity, itemId) => {
+    this.items.forEach((entry, itemId) => {
       const item = getItem(itemId);
-      if (item && quantity > 0 && item.sellPrice > 0) {
+      if (item && entry.quantity > 0 && item.sellPrice > 0) {
         sellable.push({
           itemId,
-          quantity,
+          quantity: entry.quantity,
           sellPrice: item.sellPrice
         });
       }
@@ -117,10 +218,10 @@ export class Inventory {
 
   getTotalValue(): number {
     let total = 0;
-    this.items.forEach((quantity, itemId) => {
+    this.items.forEach((entry, itemId) => {
       const item = getItem(itemId);
       if (item) {
-        total += item.sellPrice * quantity;
+        total += item.sellPrice * entry.quantity;
       }
     });
     return total;
