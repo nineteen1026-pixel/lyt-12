@@ -4,6 +4,7 @@ import { useGameStore } from '../game/stores/gameStore';
 import { getItem } from '../game/data/items';
 import { getVillagerById, TIER_CONFIG, REPUTATION_LEVELS } from '../game/data/orders';
 import type { Order, OrderTier } from '../game/types/game';
+import { DAY_DURATION } from '../game/types/game';
 
 const gameStore = useGameStore();
 const activeTab = ref<'active' | 'history'>('active');
@@ -60,18 +61,36 @@ const getTierInfo = (tier: OrderTier) => TIER_CONFIG[tier];
 
 const formatTimeRemaining = (deadline: number) => {
   const remaining = Math.max(0, deadline - Date.now());
-  const totalSeconds = Math.floor(remaining / 1000);
-  const days = Math.floor(totalSeconds / (15));
-  const hours = Math.floor((totalSeconds % (15)) / 60);
-  const minutes = Math.floor(totalSeconds % 60);
+  const gameDays = remaining / DAY_DURATION;
   
-  if (days > 0) {
-    return `${days}天${hours}时`;
+  if (gameDays >= 1) {
+    const wholeDays = Math.floor(gameDays);
+    const dayProgress = (gameDays - wholeDays) * 100;
+    return {
+      text: `${wholeDays + 1} 天`,
+      subText: `约 ${wholeDays}天多`,
+      showProgress: false,
+      progress: 0
+    };
   }
-  if (hours > 0) {
-    return `${hours}时${minutes}分`;
+  
+  if (remaining > 0) {
+    const seconds = Math.ceil(remaining / 1000);
+    const dayPercent = (remaining / DAY_DURATION) * 100;
+    return {
+      text: `今日内到期`,
+      subText: `剩 ${seconds} 秒`,
+      showProgress: true,
+      progress: dayPercent
+    };
   }
-  return `${minutes}分${totalSeconds % 60}秒`;
+  
+  return {
+    text: `已过期`,
+    subText: '',
+    showProgress: false,
+    progress: 0
+  };
 };
 
 const getUrgency = (order: Order) => {
@@ -215,19 +234,40 @@ const refreshOrders = () => {
                   订单号: {{ order.id.slice(-8) }}
                 </div>
               </div>
-              <div class="text-right">
-                <div 
-                  v-if="order.status === 'active'"
-                  class="font-pixel text-xs"
-                  :class="{
-                    'text-red-600 animate-pulse': getUrgency(order) === 'urgent',
-                    'text-orange-500': getUrgency(order) === 'warning',
-                    'text-farm-wood-dark': getUrgency(order) === 'normal',
-                    'text-gray-500 line-through': getUrgency(order) === 'expired'
-                  }"
-                >
-                  ⏰ {{ formatTimeRemaining(order.deadline) }}
-                </div>
+              <div class="text-right min-w-[90px]">
+                <template v-if="order.status === 'active'">
+                  <div 
+                    class="font-pixel text-sm"
+                    :class="{
+                      'text-red-600 animate-pulse': getUrgency(order) === 'urgent',
+                      'text-orange-500': getUrgency(order) === 'warning',
+                      'text-farm-wood-dark': getUrgency(order) === 'normal',
+                      'text-gray-500 line-through': getUrgency(order) === 'expired'
+                    }"
+                  >
+                    ⏰ {{ formatTimeRemaining(order.deadline).text }}
+                  </div>
+                  <div 
+                    v-if="formatTimeRemaining(order.deadline).subText" 
+                    class="font-pixel text-[10px] text-farm-wood-dark/60 mt-0.5"
+                  >
+                    {{ formatTimeRemaining(order.deadline).subText }}
+                  </div>
+                  <div 
+                    v-if="formatTimeRemaining(order.deadline).showProgress"
+                    class="w-full h-1.5 bg-farm-wood-dark/20 mt-1.5 overflow-hidden rounded-none"
+                  >
+                    <div 
+                      class="h-full transition-all duration-1000 ease-linear"
+                      :class="{
+                        'bg-red-500': getUrgency(order) === 'urgent' || getUrgency(order) === 'expired',
+                        'bg-orange-400': getUrgency(order) === 'warning',
+                        'bg-green-500': getUrgency(order) === 'normal'
+                      }"
+                      :style="{ width: `${formatTimeRemaining(order.deadline).progress}%` }"
+                    ></div>
+                  </div>
+                </template>
                 <div v-else-if="order.status === 'completed'" class="font-pixel text-xs text-green-600">
                   ✅ 已完成
                 </div>
