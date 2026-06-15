@@ -369,6 +369,14 @@ export class FarmScene extends Phaser.Scene {
         readyGlow.fillStyle(0xffff00, 0.4);
         readyGlow.fillCircle(TILE_SIZE - 12, productY, 10);
         container.addAt(readyGlow, 0);
+      } else if (animal.feedCount && animal.feedCount > 0) {
+        const heartText = this.add.text(TILE_SIZE - 8, 4, `♥${animal.feedCount}`, {
+          fontFamily: 'monospace',
+          fontSize: '10px',
+          color: '#ff4081'
+        });
+        heartText.setOrigin(1, 0);
+        container.add(heartText);
       }
 
       container.on('pointerdown', () => {

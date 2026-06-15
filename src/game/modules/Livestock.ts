@@ -1,11 +1,15 @@
-import type { Animal } from '../types/game';
+import type { Animal, QualityGrade } from '../types/game';
 import { getAnimalConfig } from '../data/animals';
+import { rollQuality } from './Quality';
 
 export class Livestock {
   private animals: Animal[];
 
   constructor(animals: Animal[]) {
-    this.animals = animals;
+    this.animals = animals.map(a => ({
+      ...a,
+      feedCount: a.feedCount ?? 0
+    }));
   }
 
   getAnimals(): Animal[] {
@@ -23,7 +27,8 @@ export class Livestock {
       id: `${type}_${now}_${Math.random().toString(36).substr(2, 9)}`,
       type,
       lastProduceTime: now,
-      hasProduct: false
+      hasProduct: false,
+      feedCount: 0
     };
 
     this.animals.push(animal);
@@ -43,7 +48,16 @@ export class Livestock {
     return this.animals.find(a => a.id === animalId);
   }
 
-  collectProduct(animalId: string): { itemId: string; quantity: number } | null {
+  feedAnimal(animalId: string): boolean {
+    const animal = this.getAnimal(animalId);
+    if (!animal) {
+      return false;
+    }
+    animal.feedCount = (animal.feedCount || 0) + 1;
+    return true;
+  }
+
+  collectProduct(animalId: string): { itemId: string; quantity: number; quality: QualityGrade } | null {
     const animal = this.getAnimal(animalId);
     if (!animal || !animal.hasProduct) {
       return null;
@@ -54,13 +68,17 @@ export class Livestock {
       return null;
     }
 
+    const quality = rollQuality(animal.feedCount || 0, false);
+
     const result = {
       itemId: config.productId,
-      quantity: config.productAmount
+      quantity: config.productAmount,
+      quality
     };
 
     animal.hasProduct = false;
     animal.lastProduceTime = Date.now();
+    animal.feedCount = 0;
 
     return result;
   }

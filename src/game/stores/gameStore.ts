@@ -19,6 +19,7 @@ import { getQualitySellPrice, getQualityStars } from '../modules/Quality';
 import { gameDB } from '../db';
 import { getItem } from '../data/items';
 import { getCropConfig } from '../data/crops';
+import { getAnimalConfig } from '../data/animals';
 import { getVillagerById, getReputationLevel } from '../data/orders';
 import { getBuildingConfig } from '../data/buildings';
 import { ACHIEVEMENTS, getAchievementById } from '../data/achievements';
@@ -576,25 +577,31 @@ export const useGameStore = defineStore('game', () => {
 
     const result = livestock.value.collectProduct(animalId);
     if (result) {
-      const defaultQuality = 3 as QualityGrade;
-      inventory.value.addItem(result.itemId, result.quantity, defaultQuality);
+      inventory.value.addItem(result.itemId, result.quantity, result.quality);
       const item = getItem(result.itemId);
+      const qualityName = QUALITY_NAMES[result.quality];
+      const stars = getQualityStars(result.quality);
       
       if (statistics.value) {
         statistics.value.recordProductCollected(result.itemId, result.quantity);
-        statistics.value.recordQualityHarvest(defaultQuality);
+        statistics.value.recordQualityHarvest(result.quality);
       }
       if (codexSystem.value) {
-        codexSystem.value.discoverItem(result.itemId, result.quantity, defaultQuality);
+        codexSystem.value.discoverItem(result.itemId, result.quantity, result.quality);
       }
       checkAchievements();
       
-      addNotification(`收集了${result.quantity}个${item?.name}！`, 'success');
+      addNotification(`收集了${result.quantity}个${item?.name}！${stars} ${qualityName}`, 'success');
       saveGame();
     } else {
       const animal = livestock.value.getAnimal(animalId);
       if (animal && !animal.hasProduct) {
-        addNotification('还没产出呢，再等等~', 'info');
+        const fed = livestock.value.feedAnimal(animalId);
+        if (fed) {
+          const animalConfig = getAnimalConfig(animal.type);
+          addNotification(`喂养了${animalConfig?.name || '动物'}！（${animal.feedCount}次）`, 'info');
+          saveGame();
+        }
       }
     }
   }

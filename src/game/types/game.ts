@@ -64,6 +64,7 @@ export interface Animal {
   type: 'chicken' | 'cow';
   lastProduceTime: number;
   hasProduct: boolean;
+  feedCount?: number;
 }
 
 export interface Item {
