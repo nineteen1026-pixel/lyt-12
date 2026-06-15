@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed, toRaw } from 'vue';
-import type { GameState, Plot, Animal, InventoryItem, ToolType, Season, WeatherType, WeatherState, Order, Building, BuildingType, BuildingConfig, GameStats, AchievementProgress, CodexEntry } from '../types/game';
+import type { GameState, Plot, Animal, InventoryItem, ToolType, Season, WeatherType, WeatherState, Order, Building, BuildingType, BuildingConfig, GameStats, AchievementProgress, CodexEntry, QualityGrade } from '../types/game';
+import { QUALITY_PRICE_MULTIPLIER, QUALITY_NAMES } from '../types/game';
 import { MapGrid } from '../modules/MapGrid';
 import { CropGrowth } from '../modules/CropGrowth';
 import { Livestock } from '../modules/Livestock';
@@ -14,6 +15,7 @@ import { Statistics } from '../modules/Statistics';
 import { AchievementSystem, type AchievementUnlockResult } from '../modules/Achievements';
 import { CodexSystem, type DiscoveryResult } from '../modules/Codex';
 import { shareCardGenerator } from '../modules/ShareCard';
+import { getQualitySellPrice, getQualityStars } from '../modules/Quality';
 import { gameDB } from '../db';
 import { getItem } from '../data/items';
 import { getCropConfig } from '../data/crops';
@@ -499,19 +501,21 @@ export const useGameStore = defineStore('game', () => {
       if (plot.state === 'ready' && plot.crop) {
         const result = cropGrowth.value.harvest(x, y);
         if (result) {
-          inventory.value.addItem(result.itemId, result.quantity);
+          inventory.value.addItem(result.itemId, result.quantity, result.quality);
           const item = getItem(result.itemId);
           
           if (statistics.value) {
             statistics.value.recordCropHarvested(plot.crop.type, result.quantity);
+            statistics.value.recordQualityHarvest(result.quality);
           }
           if (codexSystem.value) {
-            codexSystem.value.discoverCrop(plot.crop.type, result.quantity);
-            codexSystem.value.discoverItem(result.itemId, result.quantity);
+            codexSystem.value.discoverCrop(plot.crop.type, result.quantity, result.quality);
+            codexSystem.value.discoverItem(result.itemId, result.quantity, result.quality);
           }
           checkAchievements();
           
-          addNotification(`收获了${result.quantity}个${item?.name}！`, 'success');
+          const qualityName = QUALITY_NAMES[result.quality];
+          addNotification(`收获了${result.quantity}个${item?.name}！品质：${qualityName}`, 'success');
           saveGame();
         }
         return;
@@ -572,14 +576,16 @@ export const useGameStore = defineStore('game', () => {
 
     const result = livestock.value.collectProduct(animalId);
     if (result) {
-      inventory.value.addItem(result.itemId, result.quantity);
+      const defaultQuality = 3 as QualityGrade;
+      inventory.value.addItem(result.itemId, result.quantity, defaultQuality);
       const item = getItem(result.itemId);
       
       if (statistics.value) {
         statistics.value.recordProductCollected(result.itemId, result.quantity);
+        statistics.value.recordQualityHarvest(defaultQuality);
       }
       if (codexSystem.value) {
-        codexSystem.value.discoverItem(result.itemId, result.quantity);
+        codexSystem.value.discoverItem(result.itemId, result.quantity, defaultQuality);
       }
       checkAchievements();
       
@@ -627,12 +633,12 @@ export const useGameStore = defineStore('game', () => {
     return result;
   }
 
-  function sellItem(itemId: string, quantity: number = 1) {
+  function sellItem(itemId: string, quantity: number = 1, quality?: QualityGrade) {
     if (!shop.value || !gameState.value) {
       return { success: false };
     }
 
-    const result = shop.value.sellItem(itemId, quantity);
+    const result = shop.value.sellItem(itemId, quantity, quality);
     if (result.success && result.earned) {
       gameState.value.coins = shop.value.getCoins();
       const item = getItem(itemId);
@@ -640,10 +646,17 @@ export const useGameStore = defineStore('game', () => {
       if (statistics.value) {
         statistics.value.recordCoinsEarned(result.earned);
         statistics.value.recordItemsSold(quantity);
+        const basePrice = item?.sellPrice || 0;
+        const baseTotal = basePrice * quantity;
+        const bonus = result.earned - baseTotal;
+        if (bonus > 0) {
+          statistics.value.recordQualityBonusCoins(bonus);
+        }
       }
       checkAchievements();
       
-      addNotification(`出售了${quantity}个${item?.name}，获得${result.earned}金币！`, 'success');
+      const qualityLabel = quality ? ` ${QUALITY_NAMES[quality]}` : '';
+      addNotification(`出售了${quantity}个${item?.name}${qualityLabel}，获得${result.earned}金币！`, 'success');
       saveGame();
     } else {
       addNotification(result.message || '出售失败！', 'error');
@@ -1038,6 +1051,10 @@ export const useGameStore = defineStore('game', () => {
   const dayCropsWatered = ref(0);
   const dayTotalCrops = ref(0);
 
+  function getInventoryItemCount(itemId: string, minQuality?: QualityGrade): number {
+    return inventory.value?.getItemCount(itemId, minQuality) ?? 0;
+  }
+
   function checkPerfectDay() {
     if (!statistics.value || !orders.value || !mapGrid.value || !cropGrowth.value) return;
 
@@ -1162,6 +1179,9 @@ export const useGameStore = defineStore('game', () => {
     dayOrdersCompleted,
     dayOrdersTotal,
     dayCropsWatered,
-    dayTotalCrops
+    dayTotalCrops,
+    getInventoryItemCount,
+    getQualitySellPrice,
+    getQualityStars
   };
 });

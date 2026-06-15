@@ -1,4 +1,4 @@
-import type { Order, OrderItem, OrderTier, OrderReward, ReputationState, Season } from '../types/game';
+import type { Order, OrderItem, OrderTier, OrderReward, ReputationState, Season, QualityGrade } from '../types/game';
 import { DAY_DURATION } from '../types/game';
 import {
   TIER_CONFIG,
@@ -14,9 +14,10 @@ import { getItem } from '../data/items';
 import { getCropConfig } from '../data/crops';
 
 export interface InventoryAccess {
-  hasItem(itemId: string, quantity: number): boolean;
-  removeItem(itemId: string, quantity: number): boolean;
-  addItem(itemId: string, quantity: number): boolean;
+  hasItem(itemId: string, quantity: number, minQuality?: QualityGrade): boolean;
+  removeItem(itemId: string, quantity: number, quality?: QualityGrade): boolean;
+  addItem(itemId: string, quantity: number, quality?: QualityGrade): boolean;
+  getItemCount(itemId: string, minQuality?: QualityGrade): number;
 }
 
 export interface ShopAccess {
@@ -162,7 +163,9 @@ export class Orders {
       const tierMultiplier = tier === 'common' ? 1 : tier === 'rare' ? 1.3 : tier === 'epic' ? 1.6 : 2;
       const quantity = Math.max(1, Math.floor(baseQty * tierMultiplier));
 
-      items.push({ itemId: template.itemId, quantity });
+      const minQuality: QualityGrade | undefined = tier === 'epic' ? 2 : tier === 'legendary' ? 3 : undefined;
+
+      items.push({ itemId: template.itemId, quantity, minQuality });
     }
 
     let totalBaseValue = 0;
@@ -219,11 +222,13 @@ export class Orders {
 
     const missingItems: OrderItem[] = [];
     for (const item of order.items) {
-      const currentQty = (this.inventory as any).getItemCount?.(item.itemId) ?? 0;
+      const minQ = item.minQuality;
+      const currentQty = this.inventory.getItemCount(item.itemId, minQ);
       if (currentQty < item.quantity) {
         missingItems.push({
           itemId: item.itemId,
-          quantity: item.quantity - currentQty
+          quantity: item.quantity - currentQty,
+          minQuality: minQ
         });
       }
     }
@@ -263,7 +268,7 @@ export class Orders {
     }
 
     for (const item of order.items) {
-      if (!this.inventory.removeItem(item.itemId, item.quantity)) {
+      if (!this.inventory.removeItem(item.itemId, item.quantity, item.minQuality)) {
         return { success: false, message: '扣除物品失败' };
       }
     }

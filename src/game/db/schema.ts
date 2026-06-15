@@ -2,7 +2,7 @@ import type { GameState, Plot, Animal, InventoryItem, Order, ReputationState, Bu
 
 export const DB_CONFIG = {
   name: 'PixelFarmDB',
-  version: 4
+  version: 5
 };
 
 export interface DBStores {
@@ -32,7 +32,7 @@ export const STORE_CONFIGS = [
   },
   {
     name: 'inventory',
-    keyPath: 'itemId'
+    keyPath: 'dbKey'
   },
   {
     name: 'orders',

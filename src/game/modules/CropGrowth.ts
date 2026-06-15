@@ -1,5 +1,6 @@
-import type { Plot, Crop, Season } from '../types/game';
+import type { Plot, Crop, Season, QualityGrade } from '../types/game';
 import { getCropConfig } from '../data/crops';
+import { rollQuality } from './Quality';
 
 export interface CropGrowthBuildingsAccess {
   getGreenhouseAllowedSeasons(x: number, y: number): Season[] | null;
@@ -68,6 +69,7 @@ export class CropGrowth {
 
     if (plot.state === 'planted' && plot.crop) {
       plot.crop.watered = true;
+      plot.crop.waterCount = (plot.crop.waterCount || 0) + 1;
       plot.state = 'watered';
       return true;
     }
@@ -75,7 +77,7 @@ export class CropGrowth {
     return false;
   }
 
-  harvest(x: number, y: number): { itemId: string; quantity: number } | null {
+  harvest(x: number, y: number): { itemId: string; quantity: number; quality: QualityGrade } | null {
     const plot = this.getPlot(x, y);
     if (!plot || !plot.unlocked || !plot.crop || plot.state !== 'ready') {
       return null;
@@ -86,9 +88,13 @@ export class CropGrowth {
       return null;
     }
 
+    const isGreenhouse = this.buildings?.getGreenhouseAllowedSeasons(x, y) !== null;
+    const quality = rollQuality(plot.crop.waterCount || 0, isGreenhouse);
+
     const result = {
       itemId: config.productId,
-      quantity: 1
+      quantity: 1,
+      quality
     };
 
     delete plot.crop;

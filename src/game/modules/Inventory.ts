@@ -1,5 +1,5 @@
-import type { InventoryItem } from '../types/game';
-import { DEFAULT_INVENTORY_CAPACITY, SPOILAGE_DURATION } from '../types/game';
+import type { InventoryItem, QualityGrade } from '../types/game';
+import { DEFAULT_INVENTORY_CAPACITY, SPOILAGE_DURATION, QUALITY_PRICE_MULTIPLIER } from '../types/game';
 import { getItem } from '../data/items';
 
 export interface InventoryBuildingsAccess {
@@ -13,9 +13,21 @@ export interface SpoiledItem {
 }
 
 export class Inventory {
-  private items: Map<string, { quantity: number; addedAt: number }>;
+  private items: Map<string, { quantity: number; addedAt: number; quality: QualityGrade }>;
   private buildings: InventoryBuildingsAccess | null = null;
   private baseCapacity: number = DEFAULT_INVENTORY_CAPACITY;
+
+  private makeKey(itemId: string, quality?: QualityGrade): string {
+    return quality ? `${itemId}_q${quality}` : itemId;
+  }
+
+  private parseKey(key: string): { itemId: string; quality: QualityGrade } {
+    const match = key.match(/^(.+)_q([1-5])$/);
+    if (match) {
+      return { itemId: match[1], quality: parseInt(match[2]) as QualityGrade };
+    }
+    return { itemId: key, quality: 3 as QualityGrade };
+  }
 
   constructor(inventoryItems: InventoryItem[], buildings: InventoryBuildingsAccess | null = null) {
     this.items = new Map();
@@ -23,9 +35,12 @@ export class Inventory {
     const now = Date.now();
     for (const item of inventoryItems) {
       if (item.quantity > 0) {
-        this.items.set(item.itemId, {
+        const quality = item.quality || (3 as QualityGrade);
+        const key = this.makeKey(item.itemId, quality);
+        this.items.set(key, {
           quantity: item.quantity,
-          addedAt: item.addedAt ?? now
+          addedAt: item.addedAt ?? now,
+          quality
         });
       }
     }
@@ -58,9 +73,10 @@ export class Inventory {
 
   getItems(): Map<string, number> {
     const result = new Map<string, number>();
-    this.items.forEach((entry, itemId) => {
+    this.items.forEach((entry, key) => {
       if (entry.quantity > 0) {
-        result.set(itemId, entry.quantity);
+        const { itemId } = this.parseKey(key);
+        result.set(itemId, (result.get(itemId) || 0) + entry.quantity);
       }
     });
     return result;
@@ -68,19 +84,21 @@ export class Inventory {
 
   getInventoryItems(): InventoryItem[] {
     const items: InventoryItem[] = [];
-    this.items.forEach((entry, itemId) => {
+    this.items.forEach((entry, key) => {
       if (entry.quantity > 0) {
+        const { itemId, quality } = this.parseKey(key);
         items.push({
           itemId,
           quantity: entry.quantity,
-          addedAt: entry.addedAt
+          addedAt: entry.addedAt,
+          quality
         });
       }
     });
     return items;
   }
 
-  addItem(itemId: string, quantity: number): boolean {
+  addItem(itemId: string, quantity: number, quality?: QualityGrade): boolean {
     if (quantity <= 0) {
       return false;
     }
@@ -96,43 +114,107 @@ export class Inventory {
     }
 
     const now = Date.now();
-    const current = this.items.get(itemId);
+    const q = quality || (3 as QualityGrade);
+    const key = this.makeKey(itemId, q);
+    const current = this.items.get(key);
     if (current) {
       current.quantity += quantity;
       current.addedAt = now;
     } else {
-      this.items.set(itemId, { quantity, addedAt: now });
+      this.items.set(key, { quantity, addedAt: now, quality: q });
     }
     return true;
   }
 
-  removeItem(itemId: string, quantity: number): boolean {
+  removeItem(itemId: string, quantity: number, quality?: QualityGrade): boolean {
     if (quantity <= 0) {
       return false;
     }
 
-    const current = this.items.get(itemId);
-    if (!current || current.quantity < quantity) {
+    if (quality) {
+      const matchingKeys: string[] = [];
+      this.items.forEach((entry, key) => {
+        const parsed = this.parseKey(key);
+        if (parsed.itemId === itemId && entry.quality >= quality && entry.quantity > 0) {
+          matchingKeys.push(key);
+        }
+      });
+
+      const totalAvailable = matchingKeys.reduce((sum, key) => sum + this.items.get(key)!.quantity, 0);
+      if (totalAvailable < quantity) {
+        return false;
+      }
+
+      matchingKeys.sort((a, b) => {
+        const aEntry = this.items.get(a)!;
+        const bEntry = this.items.get(b)!;
+        return aEntry.quality - bEntry.quality;
+      });
+
+      let remaining = quantity;
+      for (const key of matchingKeys) {
+        if (remaining <= 0) break;
+        const entry = this.items.get(key)!;
+        const toRemove = Math.min(entry.quantity, remaining);
+        entry.quantity -= toRemove;
+        remaining -= toRemove;
+        if (entry.quantity <= 0) {
+          this.items.delete(key);
+        }
+      }
+
+      return remaining === 0;
+    }
+
+    const totalAvailable = this.getItemCount(itemId);
+    if (totalAvailable < quantity) {
       return false;
     }
 
-    const newQuantity = current.quantity - quantity;
-    if (newQuantity <= 0) {
-      this.items.delete(itemId);
-    } else {
-      current.quantity = newQuantity;
+    let remaining = quantity;
+    const keys: string[] = [];
+    this.items.forEach((entry, key) => {
+      const parsed = this.parseKey(key);
+      if (parsed.itemId === itemId && entry.quantity > 0) {
+        keys.push(key);
+      }
+    });
+
+    keys.sort((a, b) => {
+      const aEntry = this.items.get(a)!;
+      const bEntry = this.items.get(b)!;
+      return aEntry.quality - bEntry.quality;
+    });
+
+    for (const key of keys) {
+      if (remaining <= 0) break;
+      const entry = this.items.get(key)!;
+      const toRemove = Math.min(entry.quantity, remaining);
+      entry.quantity -= toRemove;
+      remaining -= toRemove;
+      if (entry.quantity <= 0) {
+        this.items.delete(key);
+      }
     }
 
-    return true;
+    return remaining === 0;
   }
 
-  hasItem(itemId: string, quantity: number = 1): boolean {
-    const current = this.items.get(itemId);
-    return current !== undefined && current.quantity >= quantity;
+  hasItem(itemId: string, quantity: number = 1, minQuality?: QualityGrade): boolean {
+    return this.getItemCount(itemId, minQuality) >= quantity;
   }
 
-  getItemCount(itemId: string): number {
-    return this.items.get(itemId)?.quantity ?? 0;
+  getItemCount(itemId: string, minQuality?: QualityGrade): number {
+    let total = 0;
+    this.items.forEach((entry, key) => {
+      const parsed = this.parseKey(key);
+      if (parsed.itemId === itemId && entry.quantity > 0) {
+        if (!minQuality || entry.quality >= minQuality) {
+          total += entry.quantity;
+        }
+      }
+    });
+    return total;
   }
 
   processSpoilage(currentTime: number): SpoiledItem[] {
@@ -145,7 +227,8 @@ export class Inventory {
 
     const toDelete: string[] = [];
 
-    this.items.forEach((entry, itemId) => {
+    this.items.forEach((entry, key) => {
+      const { itemId } = this.parseKey(key);
       const item = getItem(itemId);
       if (!item || item.type !== 'product') {
         return;
@@ -161,12 +244,12 @@ export class Inventory {
           itemId,
           quantity: entry.quantity
         });
-        toDelete.push(itemId);
+        toDelete.push(key);
       }
     });
 
-    for (const itemId of toDelete) {
-      this.items.delete(itemId);
+    for (const key of toDelete) {
+      this.items.delete(key);
     }
 
     return spoiled;
@@ -175,7 +258,8 @@ export class Inventory {
   getSeeds(): Array<{ itemId: string; quantity: number; cropType: string }> {
     const seeds: Array<{ itemId: string; quantity: number; cropType: string }> = [];
     
-    this.items.forEach((entry, itemId) => {
+    this.items.forEach((entry, key) => {
+      const { itemId } = this.parseKey(key);
       if (itemId.endsWith('_seed') && entry.quantity > 0) {
         const cropType = itemId.replace('_seed', '');
         seeds.push({ itemId, quantity: entry.quantity, cropType });
@@ -185,13 +269,14 @@ export class Inventory {
     return seeds;
   }
 
-  getProducts(): Array<{ itemId: string; quantity: number }> {
-    const products: Array<{ itemId: string; quantity: number }> = [];
+  getProducts(): Array<{ itemId: string; quantity: number; quality: QualityGrade }> {
+    const products: Array<{ itemId: string; quantity: number; quality: QualityGrade }> = [];
     
-    this.items.forEach((entry, itemId) => {
+    this.items.forEach((entry, key) => {
+      const { itemId } = this.parseKey(key);
       if (itemId.endsWith('_product') || itemId === 'egg' || itemId === 'milk') {
         if (entry.quantity > 0) {
-          products.push({ itemId, quantity: entry.quantity });
+          products.push({ itemId, quantity: entry.quantity, quality: entry.quality });
         }
       }
     });
@@ -199,16 +284,18 @@ export class Inventory {
     return products;
   }
 
-  getSellableItems(): Array<{ itemId: string; quantity: number; sellPrice: number }> {
-    const sellable: Array<{ itemId: string; quantity: number; sellPrice: number }> = [];
+  getSellableItems(): Array<{ itemId: string; quantity: number; sellPrice: number; quality: QualityGrade }> {
+    const sellable: Array<{ itemId: string; quantity: number; sellPrice: number; quality: QualityGrade }> = [];
 
-    this.items.forEach((entry, itemId) => {
+    this.items.forEach((entry, key) => {
+      const { itemId } = this.parseKey(key);
       const item = getItem(itemId);
       if (item && entry.quantity > 0 && item.sellPrice > 0) {
         sellable.push({
           itemId,
           quantity: entry.quantity,
-          sellPrice: item.sellPrice
+          sellPrice: item.sellPrice,
+          quality: entry.quality
         });
       }
     });
@@ -218,10 +305,12 @@ export class Inventory {
 
   getTotalValue(): number {
     let total = 0;
-    this.items.forEach((entry, itemId) => {
+    this.items.forEach((entry, key) => {
+      const { itemId } = this.parseKey(key);
       const item = getItem(itemId);
       if (item) {
-        total += item.sellPrice * entry.quantity;
+        const multiplier = QUALITY_PRICE_MULTIPLIER[entry.quality];
+        total += Math.floor(item.sellPrice * multiplier) * entry.quantity;
       }
     });
     return total;

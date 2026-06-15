@@ -2,8 +2,8 @@
 import { ref, computed } from 'vue';
 import { useGameStore } from '../game/stores/gameStore';
 import { CODEX_CATEGORY_NAMES, CODEX_CATEGORY_ICONS, getCodexEntriesByCategory } from '../game/data/codex';
-import { RARITY_COLORS, RARITY_NAMES } from '../game/types/game';
-import type { CodexCategory, Rarity, CodexEntry } from '../game/types/game';
+import { RARITY_COLORS, RARITY_NAMES, QUALITY_COLORS, QUALITY_NAMES } from '../game/types/game';
+import type { CodexCategory, Rarity, CodexEntry, QualityGrade } from '../game/types/game';
 
 const gameStore = useGameStore();
 const activeCategory = ref<CodexCategory | 'all'>('all');
@@ -177,7 +177,10 @@ const close = () => {
                 {{ getCategoryName(entry.category) }}
               </span>
               <span v-if="entry.discovered && entry.count > 0" class="font-pixel text-[7px] text-farm-wood-dark/60 mt-1">
-                收集: {{ entry.count }}
+                {{ entry.count }}
+                <span v-if="entry.bestQuality" :style="{ color: QUALITY_COLORS[entry.bestQuality] }">
+                  {{ '★'.repeat(entry.bestQuality) }}
+                </span>
               </span>
             </div>
           </div>
@@ -215,6 +218,7 @@ const close = () => {
                 </div>
                 <div v-if="e.discovered" class="font-pixel text-[8px] text-farm-wood-dark/50">
                   <span v-if="e.count > 0">收集数量: {{ e.count }} | </span>
+                  <span v-if="e.bestQuality">最高品质: <span :style="{ color: QUALITY_COLORS[e.bestQuality] }">{{ '★'.repeat(e.bestQuality) }}</span> | </span>
                   <span>发现于: {{ formatTime(e.discoveredAt) }}</span>
                 </div>
                 <div v-if="!e.discovered && e.hint" class="font-pixel text-[8px] text-blue-600 mt-1">

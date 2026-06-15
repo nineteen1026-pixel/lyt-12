@@ -1,3 +1,5 @@
+export type QualityGrade = 1 | 2 | 3 | 4 | 5;
+
 export type PlotState = 'empty' | 'tilled' | 'planted' | 'watered' | 'ready';
 
 export type Season = 'spring' | 'summer' | 'autumn' | 'winter';
@@ -38,6 +40,7 @@ export interface Crop {
   watered: boolean;
   lastGrowthCheck: number;
   frozen?: boolean;
+  waterCount?: number;
 }
 
 export interface Plot {
@@ -108,6 +111,7 @@ export interface Villager {
 export interface OrderItem {
   itemId: string;
   quantity: number;
+  minQuality?: QualityGrade;
 }
 
 export interface OrderReward {
@@ -152,6 +156,8 @@ export interface InventoryItem {
   itemId: string;
   quantity: number;
   addedAt?: number;
+  quality?: QualityGrade;
+  dbKey?: string;
 }
 
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
@@ -208,6 +214,8 @@ export interface CodexEntry {
   discoveredAt?: number;
   count: number;
   hint?: string;
+  bestQuality?: QualityGrade;
+  qualityCounts?: Record<QualityGrade, number>;
 }
 
 export interface GameStats {
@@ -241,6 +249,9 @@ export interface GameStats {
   fishCaught: Record<string, number>;
   artifactsFound: number;
   artifactsDiscovered: Record<string, number>;
+  cropsByQuality: Record<QualityGrade, number>;
+  highestQualityHarvested: QualityGrade;
+  totalQualityBonusCoins: number;
 }
 
 export interface AchievementState {
@@ -280,4 +291,36 @@ export const RARITY_NAMES: Record<Rarity, string> = {
   rare: '稀有',
   epic: '史诗',
   legendary: '传说'
+};
+
+export const QUALITY_NAMES: Record<QualityGrade, string> = {
+  1: '一星',
+  2: '二星',
+  3: '三星',
+  4: '四星',
+  5: '五星'
+};
+
+export const QUALITY_COLORS: Record<QualityGrade, string> = {
+  1: '#9e9e9e',
+  2: '#4caf50',
+  3: '#2196f3',
+  4: '#9c27b0',
+  5: '#ff9800'
+};
+
+export const QUALITY_PRICE_MULTIPLIER: Record<QualityGrade, number> = {
+  1: 0.6,
+  2: 0.8,
+  3: 1.0,
+  4: 1.5,
+  5: 2.5
+};
+
+export const QUALITY_WEIGHTS: Record<QualityGrade, number> = {
+  1: 40,
+  2: 30,
+  3: 20,
+  4: 8,
+  5: 2
 };

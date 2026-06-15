@@ -2,6 +2,8 @@
 import { ref, computed } from 'vue';
 import { useGameStore } from '../game/stores/gameStore';
 import { getCropConfig } from '../game/data/crops';
+import { QUALITY_COLORS, QUALITY_NAMES } from '../game/types/game';
+import type { QualityGrade } from '../game/types/game';
 
 const gameStore = useGameStore();
 const activeTab = ref<'buy' | 'sell'>('buy');
@@ -36,8 +38,8 @@ const buy = (itemId: string) => {
   gameStore.buyItem(itemId, qty);
 };
 
-const sell = (itemId: string, quantity: number) => {
-  gameStore.sellItem(itemId, quantity);
+const sell = (itemId: string, quantity: number, quality?: QualityGrade) => {
+  gameStore.sellItem(itemId, quantity, quality);
 };
 
 const expand = () => {
@@ -160,29 +162,33 @@ const getCropForSeed = (itemId: string) => {
         <template v-else>
           <div v-if="sellItems.length > 0" class="space-y-3">
             <div 
-              v-for="{ item, quantity, sellPrice } in sellItems" 
-              :key="item.id"
+              v-for="{ item, quantity, sellPrice, quality } in sellItems" 
+              :key="`${item.id}_q${quality}`"
               class="flex items-center gap-4 p-3 bg-farm-ui-dark border-2 border-farm-wood-dark"
+              :style="{ borderLeftColor: QUALITY_COLORS[quality], borderLeftWidth: '4px' }"
             >
               <span class="text-3xl">{{ item.icon }}</span>
               <div class="flex-1">
                 <div class="font-pixel text-sm text-farm-wood-dark">{{ item.name }}</div>
                 <div class="font-pixel text-[10px] text-farm-wood-dark/70 mt-1">
                   库存: {{ quantity }}
+                  <span class="ml-2" :style="{ color: QUALITY_COLORS[quality] }">
+                    {{ '★'.repeat(quality) }}{{ QUALITY_NAMES[quality] }}
+                  </span>
                 </div>
               </div>
               <div class="flex items-center gap-2">
                 <span class="font-pixel text-sm text-farm-gold-dark">💰{{ sellPrice }}/个</span>
                 <button 
                   class="font-pixel text-xs px-3 py-2 bg-farm-gold border-2 border-farm-wood-dark hover:bg-farm-gold-dark transition-colors text-farm-wood-dark"
-                  @click="sell(item.id, 1)"
+                  @click="sell(item.id, 1, quality)"
                 >
                   卖1个
                 </button>
                 <button 
                   v-if="quantity > 1"
                   class="font-pixel text-xs px-3 py-2 bg-farm-gold border-2 border-farm-wood-dark hover:bg-farm-gold-dark transition-colors text-farm-wood-dark"
-                  @click="sell(item.id, quantity)"
+                  @click="sell(item.id, quantity, quality)"
                 >
                   全卖
                 </button>

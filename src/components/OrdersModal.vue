@@ -3,8 +3,8 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useGameStore } from '../game/stores/gameStore';
 import { getItem } from '../game/data/items';
 import { getVillagerById, TIER_CONFIG, REPUTATION_LEVELS } from '../game/data/orders';
-import type { Order, OrderTier } from '../game/types/game';
-import { DAY_DURATION } from '../game/types/game';
+import type { Order, OrderTier, QualityGrade } from '../game/types/game';
+import { DAY_DURATION, QUALITY_COLORS, QUALITY_NAMES } from '../game/types/game';
 
 const gameStore = useGameStore();
 const activeTab = ref<'active' | 'history'>('active');
@@ -113,8 +113,8 @@ const getMissingItems = (order: Order) => {
   return result.missingItems;
 };
 
-const getInventoryCount = (itemId: string) => {
-  return gameStore.inventory?.getItemCount(itemId) || 0;
+const getInventoryCount = (itemId: string, minQuality?: QualityGrade) => {
+  return gameStore.inventory?.getItemCount(itemId, minQuality) || 0;
 };
 
 const submit = (orderId: string) => {
@@ -290,14 +290,21 @@ const refreshOrders = () => {
                     <div class="flex-1">
                       <div class="font-pixel text-xs text-farm-wood-dark">
                         {{ getItemData(item.itemId)?.name || item.itemId }}
+                        <span 
+                          v-if="item.minQuality"
+                          class="ml-1 text-[9px]"
+                          :style="{ color: QUALITY_COLORS[item.minQuality] }"
+                        >
+                          {{ '★'.repeat(item.minQuality) }}起
+                        </span>
                       </div>
                     </div>
                     <div class="font-pixel text-xs">
                       <span 
                         v-if="order.status === 'active'"
-                        :class="getInventoryCount(item.itemId) >= item.quantity ? 'text-green-600' : 'text-red-600'"
+                        :class="getInventoryCount(item.itemId, item.minQuality) >= item.quantity ? 'text-green-600' : 'text-red-600'"
                       >
-                        {{ getInventoryCount(item.itemId) }}
+                        {{ getInventoryCount(item.itemId, item.minQuality) }}
                       </span>
                       <span class="text-farm-wood-dark"> / {{ item.quantity }}</span>
                     </div>

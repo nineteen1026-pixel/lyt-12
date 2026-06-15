@@ -2,39 +2,42 @@
 import { computed } from 'vue';
 import { useGameStore } from '../game/stores/gameStore';
 import { getItem } from '../game/data/items';
+import { QUALITY_COLORS, QUALITY_NAMES } from '../game/types/game';
+import type { QualityGrade } from '../game/types/game';
 
 const gameStore = useGameStore();
 
 const inventoryItems = computed(() => {
   if (!gameStore.inventory) return [];
-  const items = gameStore.inventory.getItems();
-  const result: Array<{ itemId: string; quantity: number; item: any }> = [];
-  items.forEach((quantity, itemId) => {
-    const item = getItem(itemId);
+  const items = gameStore.inventory.getInventoryItems();
+  const result: Array<{ itemId: string; quantity: number; item: any; quality: QualityGrade }> = [];
+  for (const inv of items) {
+    const item = getItem(inv.itemId);
     if (item) {
-      result.push({ itemId, quantity, item });
+      result.push({ itemId: inv.itemId, quantity: inv.quantity, item, quality: inv.quality || 3 });
     }
-  });
+  }
   return result;
 });
 
 const gridItems = computed(() => {
   const items = [...inventoryItems.value];
   while (items.length < 36) {
-    items.push({ itemId: '', quantity: 0, item: null });
+    items.push({ itemId: '', quantity: 0, item: null, quality: 3 });
   }
   return items;
 });
 
 const totalValue = computed(() => {
   return inventoryItems.value.reduce((sum, inv) => {
-    return sum + (inv.item?.sellPrice || 0) * inv.quantity;
+    const multiplier = { 1: 0.6, 2: 0.8, 3: 1.0, 4: 1.5, 5: 2.5 }[inv.quality] || 1.0;
+    return sum + Math.floor((inv.item?.sellPrice || 0) * multiplier) * inv.quantity;
   }, 0);
 });
 
-const sellItem = (itemId: string, quantity: number) => {
+const sellItem = (itemId: string, quantity: number, quality?: QualityGrade) => {
   if (itemId) {
-    gameStore.sellItem(itemId, quantity);
+    gameStore.sellItem(itemId, quantity, quality);
   }
 };
 </script>
@@ -62,11 +65,18 @@ const sellItem = (itemId: string, quantity: number) => {
           :key="index"
           class="aspect-square bg-farm-ui-dark border-2 border-farm-wood-dark flex flex-col items-center justify-center relative"
           :class="{ 'cursor-pointer hover:border-farm-gold': inv.itemId }"
-          @click="inv.itemId && sellItem(inv.itemId, 1)"
+          @click="inv.itemId && sellItem(inv.itemId, 1, inv.quality)"
         >
           <span v-if="inv.item" class="text-2xl">{{ inv.item.icon }}</span>
           <span v-if="inv.quantity > 0" class="absolute bottom-1 right-1 font-pixel text-[10px] text-farm-wood-dark">
             {{ inv.quantity }}
+          </span>
+          <span 
+            v-if="inv.item && inv.quality" 
+            class="absolute top-0.5 left-0.5 font-pixel text-[7px]"
+            :style="{ color: QUALITY_COLORS[inv.quality] }"
+          >
+            {{ '★'.repeat(inv.quality) }}
           </span>
         </div>
       </div>
@@ -89,7 +99,7 @@ const sellItem = (itemId: string, quantity: number) => {
       </div>
       
       <p class="font-pixel text-[10px] text-farm-wood-dark/60 mt-4 text-center">
-        点击物品可单个出售
+        点击物品可单个出售 | ★越多品质越高售价越高
       </p>
     </div>
   </div>

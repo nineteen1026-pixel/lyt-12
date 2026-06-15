@@ -1,4 +1,4 @@
-import type { CodexEntry, CodexCategory, Rarity } from '../types/game';
+import type { CodexEntry, CodexCategory, Rarity, QualityGrade } from '../types/game';
 import { CODEX_ENTRIES, getCodexEntryById } from '../data/codex';
 
 export interface DiscoveryResult {
@@ -88,7 +88,7 @@ export class CodexSystem {
     return (discovered / categoryEntries.length) * 100;
   }
 
-  discoverEntry(entryId: string, count: number = 1): DiscoveryResult | null {
+  discoverEntry(entryId: string, count: number = 1, quality?: QualityGrade): DiscoveryResult | null {
     const entry = this.entries[entryId];
     if (!entry) return null;
 
@@ -96,6 +96,16 @@ export class CodexSystem {
 
     entry.discovered = true;
     entry.count += count;
+
+    if (quality) {
+      if (!entry.bestQuality || quality > entry.bestQuality) {
+        entry.bestQuality = quality;
+      }
+      if (!entry.qualityCounts) {
+        entry.qualityCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+      }
+      entry.qualityCounts[quality] = (entry.qualityCounts[quality] || 0) + count;
+    }
     
     if (isNew) {
       entry.discoveredAt = Date.now();
@@ -112,7 +122,7 @@ export class CodexSystem {
     return result;
   }
 
-  discoverByType(category: CodexCategory, itemId: string, count: number = 1): DiscoveryResult | null {
+  discoverByType(category: CodexCategory, itemId: string, count: number = 1, quality?: QualityGrade): DiscoveryResult | null {
     const prefixMap: Record<CodexCategory, string> = {
       crop: 'crop_',
       animal: 'animal_',
@@ -124,19 +134,19 @@ export class CodexSystem {
     };
 
     const entryId = `${prefixMap[category]}${itemId}`;
-    return this.discoverEntry(entryId, count);
+    return this.discoverEntry(entryId, count, quality);
   }
 
-  discoverCrop(cropId: string, count: number = 1): DiscoveryResult | null {
-    return this.discoverByType('crop', cropId, count);
+  discoverCrop(cropId: string, count: number = 1, quality?: QualityGrade): DiscoveryResult | null {
+    return this.discoverByType('crop', cropId, count, quality);
   }
 
   discoverAnimal(animalId: string, count: number = 1): DiscoveryResult | null {
     return this.discoverByType('animal', animalId, count);
   }
 
-  discoverItem(itemId: string, count: number = 1): DiscoveryResult | null {
-    return this.discoverByType('item', itemId, count);
+  discoverItem(itemId: string, count: number = 1, quality?: QualityGrade): DiscoveryResult | null {
+    return this.discoverByType('item', itemId, count, quality);
   }
 
   discoverBuilding(buildingId: string): DiscoveryResult | null {

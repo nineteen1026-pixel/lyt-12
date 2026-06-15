@@ -1,4 +1,5 @@
-import type { Item, BuildingType, BuildingConfig } from '../types/game';
+import type { Item, BuildingType, BuildingConfig, QualityGrade } from '../types/game';
+import { QUALITY_PRICE_MULTIPLIER } from '../types/game';
 import { getItem, getBuyableSeeds, getBuyableAnimals } from '../data/items';
 import { getCropConfig } from '../data/crops';
 import { getAnimalConfig } from '../data/animals';
@@ -9,10 +10,11 @@ import type { Livestock } from './Livestock';
 import type { Buildings } from './Buildings';
 
 export interface InventoryAccess {
-  addItem(itemId: string, quantity: number): boolean;
-  removeItem(itemId: string, quantity: number): boolean;
-  hasItem(itemId: string, quantity: number): boolean;
-  getSellableItems(): Array<{ itemId: string; quantity: number; sellPrice: number }>;
+  addItem(itemId: string, quantity: number, quality?: QualityGrade): boolean;
+  removeItem(itemId: string, quantity: number, quality?: QualityGrade): boolean;
+  hasItem(itemId: string, quantity: number, minQuality?: QualityGrade): boolean;
+  getSellableItems(): Array<{ itemId: string; quantity: number; sellPrice: number; quality: QualityGrade }>;
+  getItemCount(itemId: string, minQuality?: QualityGrade): number;
 }
 
 export interface MapGridAccess {
@@ -90,15 +92,17 @@ export class Shop {
     }));
   }
 
-  getSellableItems(): Array<{ item: Item; quantity: number; sellPrice: number }> {
+  getSellableItems(): Array<{ item: Item; quantity: number; sellPrice: number; quality: QualityGrade }> {
     const sellable = this.inventory.getSellableItems();
     
-    return sellable.map(({ itemId, quantity, sellPrice }) => {
+    return sellable.map(({ itemId, quantity, sellPrice, quality }) => {
       const item = getItem(itemId);
+      const adjustedPrice = Math.max(1, Math.floor(sellPrice * QUALITY_PRICE_MULTIPLIER[quality]));
       return {
         item: item!,
         quantity,
-        sellPrice
+        sellPrice: adjustedPrice,
+        quality
       };
     }).filter(s => s.item !== undefined);
   }
@@ -136,7 +140,7 @@ export class Shop {
     return { success: true };
   }
 
-  sellItem(itemId: string, quantity: number = 1): { success: boolean; message?: string; earned?: number } {
+  sellItem(itemId: string, quantity: number = 1, quality?: QualityGrade): { success: boolean; message?: string; earned?: number } {
     if (quantity <= 0) {
       return { success: false, message: '数量必须大于0' };
     }
@@ -146,12 +150,15 @@ export class Shop {
       return { success: false, message: '物品不存在' };
     }
 
-    if (!this.inventory.hasItem(itemId, quantity)) {
+    if (!this.inventory.hasItem(itemId, quantity, quality)) {
       return { success: false, message: '库存不足' };
     }
 
-    const totalEarned = item.sellPrice * quantity;
-    if (!this.inventory.removeItem(itemId, quantity)) {
+    const effectiveQuality = quality || (3 as QualityGrade);
+    const adjustedSellPrice = Math.max(1, Math.floor(item.sellPrice * QUALITY_PRICE_MULTIPLIER[effectiveQuality]));
+    const totalEarned = adjustedSellPrice * quantity;
+
+    if (!this.inventory.removeItem(itemId, quantity, quality)) {
       return { success: false, message: '出售失败' };
     }
 
@@ -159,16 +166,17 @@ export class Shop {
     return { success: true, earned: totalEarned };
   }
 
-  sellAllItems(): { success: boolean; totalEarned: number; sold: Array<{ itemId: string; quantity: number; earned: number }> } {
+  sellAllItems(): { success: boolean; totalEarned: number; sold: Array<{ itemId: string; quantity: number; earned: number; quality: QualityGrade }> } {
     const sellable = this.inventory.getSellableItems();
-    const sold: Array<{ itemId: string; quantity: number; earned: number }> = [];
+    const sold: Array<{ itemId: string; quantity: number; earned: number; quality: QualityGrade }> = [];
     let totalEarned = 0;
 
-    for (const { itemId, quantity, sellPrice } of sellable) {
-      if (this.inventory.removeItem(itemId, quantity)) {
-        const earned = sellPrice * quantity;
+    for (const { itemId, quantity, sellPrice, quality } of sellable) {
+      if (this.inventory.removeItem(itemId, quantity, quality)) {
+        const adjustedPrice = Math.max(1, Math.floor(sellPrice * QUALITY_PRICE_MULTIPLIER[quality]));
+        const earned = adjustedPrice * quantity;
         totalEarned += earned;
-        sold.push({ itemId, quantity, earned });
+        sold.push({ itemId, quantity, earned, quality });
       }
     }
 

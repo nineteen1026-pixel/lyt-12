@@ -101,8 +101,9 @@ class GameDatabase {
   async saveInventoryItem(item: InventoryItem): Promise<void> {
     const db = this.ensureDB();
     const clone = JSON.parse(JSON.stringify(item));
+    clone.dbKey = clone.quality ? `${clone.itemId}_q${clone.quality}` : clone.itemId;
     if (clone.quantity <= 0) {
-      await db.delete('inventory', clone.itemId);
+      await db.delete('inventory', clone.dbKey);
     } else {
       await db.put('inventory', clone);
     }
@@ -111,10 +112,13 @@ class GameDatabase {
   async saveAllInventory(items: InventoryItem[]): Promise<void> {
     const db = this.ensureDB();
     const clones = JSON.parse(JSON.stringify(items));
+    for (const item of clones) {
+      item.dbKey = item.quality ? `${item.itemId}_q${item.quality}` : item.itemId;
+    }
     const tx = db.transaction('inventory', 'readwrite');
     await Promise.all([
       ...clones.map((item: InventoryItem) => 
-        item.quantity <= 0 ? tx.store.delete(item.itemId) : tx.store.put(item)
+        item.quantity <= 0 ? tx.store.delete(item.dbKey!) : tx.store.put(item)
       ),
       tx.done
     ]);

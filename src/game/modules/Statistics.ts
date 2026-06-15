@@ -1,4 +1,4 @@
-import type { GameStats, Season, OrderTier } from '../types/game';
+import type { GameStats, Season, OrderTier, QualityGrade } from '../types/game';
 
 export const INITIAL_STATS: GameStats = {
   totalCropsHarvested: 0,
@@ -40,7 +40,10 @@ export const INITIAL_STATS: GameStats = {
   totalFishCaught: 0,
   fishCaught: {},
   artifactsFound: 0,
-  artifactsDiscovered: {}
+  artifactsDiscovered: {},
+  cropsByQuality: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+  highestQualityHarvested: 1 as QualityGrade,
+  totalQualityBonusCoins: 0
 };
 
 export type StatEventType = 
@@ -66,7 +69,9 @@ export type StatEventType =
   | 'item_discovered'
   | 'fish_caught'
   | 'artifact_found'
-  | 'play_time';
+  | 'play_time'
+  | 'quality_harvest'
+  | 'quality_bonus_coins';
 
 export interface StatEvent {
   type: StatEventType;
@@ -91,7 +96,8 @@ export class Statistics {
       seasonsExperienced: { ...INITIAL_STATS.seasonsExperienced, ...initialStats?.seasonsExperienced },
       itemsDiscovered: { ...INITIAL_STATS.itemsDiscovered, ...initialStats?.itemsDiscovered },
       fishCaught: { ...INITIAL_STATS.fishCaught, ...initialStats?.fishCaught },
-      artifactsDiscovered: { ...INITIAL_STATS.artifactsDiscovered, ...initialStats?.artifactsDiscovered }
+      artifactsDiscovered: { ...INITIAL_STATS.artifactsDiscovered, ...initialStats?.artifactsDiscovered },
+      cropsByQuality: { ...INITIAL_STATS.cropsByQuality, ...initialStats?.cropsByQuality }
     };
   }
 
@@ -266,5 +272,18 @@ export class Statistics {
     }
     
     return typeof value === 'number' ? value : 0;
+  }
+
+  recordQualityHarvest(quality: QualityGrade) {
+    this.stats.cropsByQuality[quality] = (this.stats.cropsByQuality[quality] || 0) + 1;
+    if (quality > this.stats.highestQualityHarvested) {
+      this.stats.highestQualityHarvested = quality;
+    }
+    this.notify(this.createEvent('quality_harvest', { quality }));
+  }
+
+  recordQualityBonusCoins(amount: number) {
+    this.stats.totalQualityBonusCoins += amount;
+    this.notify(this.createEvent('quality_bonus_coins', { amount }));
   }
 }
