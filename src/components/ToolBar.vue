@@ -162,6 +162,14 @@ const toggleBuildingsPanel = () => {
       </span>
     </div>
 
+    <div 
+      class="tool-btn flex flex-col items-center justify-center w-16 h-16 bg-gradient-to-b from-amber-700 to-amber-900 border-3 border-amber-950 cursor-pointer transition-all hover:from-amber-600 hover:to-amber-800 hover:scale-105 active:scale-95 relative shadow-lg"
+      @click="gameStore.openMiningModal()"
+    >
+      <span class="text-2xl">🕳️</span>
+      <span class="font-pixel text-[8px] text-amber-100 mt-1">矿洞</span>
+    </div>
+
     <div class="w-px h-12 bg-farm-wood-dark mx-2"></div>
 
     <div 

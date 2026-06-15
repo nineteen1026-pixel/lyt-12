@@ -43,7 +43,14 @@ export const INITIAL_STATS: GameStats = {
   artifactsDiscovered: {},
   cropsByQuality: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
   highestQualityHarvested: 1 as QualityGrade,
-  totalQualityBonusCoins: 0
+  totalQualityBonusCoins: 0,
+  totalMineExplored: 0,
+  minesCleared: 0,
+  totalMineralsMined: 0,
+  mineralsMined: {},
+  mineHighestFloorReached: 0,
+  totalOresMined: {},
+  mineExplorations: 0
 };
 
 export type StatEventType = 
@@ -71,7 +78,11 @@ export type StatEventType =
   | 'artifact_found'
   | 'play_time'
   | 'quality_harvest'
-  | 'quality_bonus_coins';
+  | 'quality_bonus_coins'
+  | 'mineral_mined'
+  | 'mine_floor_reached'
+  | 'mine_cleared'
+  | 'mine_exploration';
 
 export interface StatEvent {
   type: StatEventType;
@@ -97,7 +108,9 @@ export class Statistics {
       itemsDiscovered: { ...INITIAL_STATS.itemsDiscovered, ...initialStats?.itemsDiscovered },
       fishCaught: { ...INITIAL_STATS.fishCaught, ...initialStats?.fishCaught },
       artifactsDiscovered: { ...INITIAL_STATS.artifactsDiscovered, ...initialStats?.artifactsDiscovered },
-      cropsByQuality: { ...INITIAL_STATS.cropsByQuality, ...initialStats?.cropsByQuality }
+      cropsByQuality: { ...INITIAL_STATS.cropsByQuality, ...initialStats?.cropsByQuality },
+      mineralsMined: { ...INITIAL_STATS.mineralsMined, ...initialStats?.mineralsMined },
+      totalOresMined: { ...INITIAL_STATS.totalOresMined, ...initialStats?.totalOresMined }
     };
   }
 
@@ -285,5 +298,31 @@ export class Statistics {
   recordQualityBonusCoins(amount: number) {
     this.stats.totalQualityBonusCoins += amount;
     this.notify(this.createEvent('quality_bonus_coins', { amount }));
+  }
+
+  recordMineralMined(mineralId: string, quantity: number = 1) {
+    this.stats.totalMineralsMined += quantity;
+    this.stats.mineralsMined[mineralId] = (this.stats.mineralsMined[mineralId] || 0) + quantity;
+    this.stats.totalOresMined[mineralId] = (this.stats.totalOresMined[mineralId] || 0) + quantity;
+    this.recordItemDiscovered(mineralId, quantity);
+    this.notify(this.createEvent('mineral_mined', { mineralId, quantity }));
+  }
+
+  recordMineFloorReached(floor: number) {
+    if (floor > this.stats.mineHighestFloorReached) {
+      this.stats.mineHighestFloorReached = floor;
+    }
+    this.stats.totalMineExplored++;
+    this.notify(this.createEvent('mine_floor_reached', { floor }));
+  }
+
+  recordMineCleared() {
+    this.stats.minesCleared++;
+    this.notify(this.createEvent('mine_cleared', {}));
+  }
+
+  recordMineExploration() {
+    this.stats.mineExplorations++;
+    this.notify(this.createEvent('mine_exploration', {}));
   }
 }

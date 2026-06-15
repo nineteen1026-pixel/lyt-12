@@ -144,6 +144,123 @@ export const ITEMS: Record<string, Item> = {
     sellPrice: 150,
     icon: '🐄',
     description: '会产奶的奶牛'
+  },
+  coal: {
+    id: 'coal',
+    name: '煤矿',
+    type: 'mineral',
+    price: 0,
+    sellPrice: 8,
+    icon: '⬛',
+    description: '最常见的矿石，可用于燃料'
+  },
+  copper: {
+    id: 'copper',
+    name: '铜矿',
+    type: 'mineral',
+    price: 0,
+    sellPrice: 15,
+    icon: '🟫',
+    description: '常见的金属矿石，呈红棕色'
+  },
+  iron: {
+    id: 'iron',
+    name: '铁矿',
+    type: 'mineral',
+    price: 0,
+    sellPrice: 35,
+    icon: '⬜',
+    description: '坚硬的金属矿石，工业必备'
+  },
+  silver: {
+    id: 'silver',
+    name: '银矿',
+    type: 'mineral',
+    price: 0,
+    sellPrice: 60,
+    icon: '🔘',
+    description: '闪亮的贵金属矿石'
+  },
+  gold: {
+    id: 'gold',
+    name: '金矿',
+    type: 'mineral',
+    price: 0,
+    sellPrice: 120,
+    icon: '🟨',
+    description: '珍贵的黄金矿石'
+  },
+  mithril: {
+    id: 'mithril',
+    name: '秘银矿',
+    type: 'mineral',
+    price: 0,
+    sellPrice: 200,
+    icon: '🔷',
+    description: '传说中的魔法金属'
+  },
+  adamantite: {
+    id: 'adamantite',
+    name: '精金矿',
+    type: 'mineral',
+    price: 0,
+    sellPrice: 400,
+    icon: '💠',
+    description: '极其坚硬的稀有金属'
+  },
+  ruby: {
+    id: 'ruby',
+    name: '红宝石',
+    type: 'mineral',
+    price: 0,
+    sellPrice: 350,
+    icon: '🔴',
+    description: '璀璨的红色宝石'
+  },
+  sapphire: {
+    id: 'sapphire',
+    name: '蓝宝石',
+    type: 'mineral',
+    price: 0,
+    sellPrice: 350,
+    icon: '🔵',
+    description: '深邃的蓝色宝石'
+  },
+  emerald: {
+    id: 'emerald',
+    name: '祖母绿',
+    type: 'mineral',
+    price: 0,
+    sellPrice: 350,
+    icon: '🟢',
+    description: '翠绿的珍贵宝石'
+  },
+  diamond: {
+    id: 'diamond',
+    name: '钻石',
+    type: 'mineral',
+    price: 0,
+    sellPrice: 1000,
+    icon: '💎',
+    description: '最坚硬的珍贵宝石'
+  },
+  dragonstone: {
+    id: 'dragonstone',
+    name: '龙晶石',
+    type: 'mineral',
+    price: 0,
+    sellPrice: 2500,
+    icon: '🔮',
+    description: '蕴含远古龙之力量的神秘晶石'
+  },
+  mushroom: {
+    id: 'mushroom',
+    name: '矿洞蘑菇',
+    type: 'resource',
+    price: 0,
+    sellPrice: 25,
+    icon: '🍄',
+    description: '在矿洞中生长的可食用蘑菇'
   }
 };
 

@@ -25,6 +25,8 @@ import { getBuildingConfig } from '../data/buildings';
 import { ACHIEVEMENTS, getAchievementById } from '../data/achievements';
 import { CODEX_ENTRIES, getCodexEntryById } from '../data/codex';
 import { rollFish, rollArtifact, FISH_COOLDOWN, DIG_COOLDOWN } from '../data/exploration';
+import type { MineSession, MineFloor, MineTile, MineExploreResult } from '../types/game';
+import { createMineSession, generateMineFloor, canMoveTo, getStaminaCost, isAdjacent, revealAround, addItemsToSession, getMineralConfig, MINE_ENTRY_COST, MINE_STAMINA_POTION_COST, MINE_STAMINA_POTION_AMOUNT, TOTAL_MINE_FLOORS } from '../data/mining';
 
 export const useGameStore = defineStore('game', () => {
   const gameState = ref<GameState | null>(null);
@@ -81,6 +83,8 @@ export const useGameStore = defineStore('game', () => {
   const showCodex = ref(false);
   const showShareCard = ref(false);
   const currentShareCardDataUrl = ref<string | null>(null);
+  const showMiningModal = ref(false);
+  const currentMineSession = ref<MineSession | null>(null);
 
   let notificationId = 0;
 
@@ -1096,6 +1100,272 @@ export const useGameStore = defineStore('game', () => {
     dayCropsWatered.value = wateredCount;
   }
 
+  function openMiningModal() {
+    showMiningModal.value = true;
+  }
+
+  function closeMiningModal() {
+    showMiningModal.value = false;
+  }
+
+  function startMineExploration(): { success: boolean; message: string } {
+    if (!shop.value || !statistics.value) {
+      return { success: false, message: '系统未初始化' };
+    }
+
+    const coins = shop.value.getCoins();
+    if (coins < MINE_ENTRY_COST) {
+      return { success: false, message: `进入矿洞需要${MINE_ENTRY_COST}金币` };
+    }
+
+    if (currentMineSession.value?.active) {
+      return { success: false, message: '已有正在进行的矿洞探险' };
+    }
+
+    shop.value.spendCoins(MINE_ENTRY_COST);
+    gameState.value!.coins = shop.value.getCoins();
+    statistics.value.recordCoinsSpent(MINE_ENTRY_COST);
+    statistics.value.recordMineExploration();
+
+    const session = createMineSession(TOTAL_MINE_FLOORS);
+    currentMineSession.value = session;
+    statistics.value.recordMineFloorReached(1);
+    checkAchievements();
+    saveGame();
+
+    addNotification('⛏️ 进入矿洞第1层！', 'info');
+    return { success: true, message: '矿洞探险开始' };
+  }
+
+  function getCurrentMineFloor(): MineFloor | null {
+    if (!currentMineSession.value) return null;
+    return currentMineSession.value.floors[currentMineSession.value.currentFloor] || null;
+  }
+
+  function moveInMine(x: number, y: number): { success: boolean; message: string } {
+    const session = currentMineSession.value;
+    if (!session || !session.active) {
+      return { success: false, message: '没有进行中的矿洞探险' };
+    }
+
+    const floor = session.floors[session.currentFloor];
+    if (!floor) {
+      return { success: false, message: '当前层数据错误' };
+    }
+
+    if (!isAdjacent(floor.playerX, floor.playerY, x, y)) {
+      return { success: false, message: '只能移动到相邻的格子' };
+    }
+
+    if (!canMoveTo(floor, x, y)) {
+      return { success: false, message: '该位置无法通过，请先挖掘' };
+    }
+
+    floor.playerX = x;
+    floor.playerY = y;
+    revealAround(floor.tiles, x, y);
+
+    if (x === floor.exitX && y === floor.exitY) {
+      return advanceToNextFloor();
+    }
+
+    return { success: true, message: '移动成功' };
+  }
+
+  function advanceToNextFloor(): { success: boolean; message: string } {
+    const session = currentMineSession.value;
+    if (!session) return { success: false, message: '无进行中的探险' };
+
+    const currentFloorNum = session.currentFloor;
+    const currentFloor = session.floors[currentFloorNum];
+    currentFloor.cleared = true;
+    currentFloor.explored = true;
+
+    if (currentFloorNum >= session.maxFloor) {
+      statistics.value?.recordMineCleared();
+      endMineExploration(true);
+      addNotification('🎉 恭喜！通关矿洞全部层数！', 'success');
+      return { success: true, message: '通关成功！' };
+    }
+
+    const nextFloorNum = currentFloorNum + 1;
+    if (!session.floors[nextFloorNum]) {
+      session.floors[nextFloorNum] = generateMineFloor(nextFloorNum);
+    }
+
+    session.currentFloor = nextFloorNum;
+    const newFloor = session.floors[nextFloorNum];
+    session.stamina = newFloor.maxStamina;
+    session.maxStamina = newFloor.maxStamina;
+
+    statistics.value?.recordMineFloorReached(nextFloorNum);
+    checkAchievements();
+    addNotification(`⬇️ 进入矿洞第${nextFloorNum}层！`, 'info');
+    saveGame();
+
+    return { success: true, message: `进入第${nextFloorNum}层`, clearedFloor: true, advancedFloor: true } as any;
+  }
+
+  function mineTile(x: number, y: number): MineExploreResult & { success: boolean } {
+    const session = currentMineSession.value;
+    const defaultResult = {
+      sessionId: '',
+      floor: 0,
+      quantity: 0,
+      staminaCost: 0,
+      message: '',
+      tilesMined: 0,
+      reachedFloor: 0,
+      newDiscoveries: [],
+      success: false
+    };
+
+    if (!session || !session.active) {
+      return { ...defaultResult, message: '没有进行中的矿洞探险' };
+    }
+
+    const floor = session.floors[session.currentFloor];
+    if (!floor) {
+      return { ...defaultResult, message: '当前层数据错误' };
+    }
+
+    if (!isAdjacent(floor.playerX, floor.playerY, x, y)) {
+      return { ...defaultResult, message: '只能挖掘相邻的格子' };
+    }
+
+    const tile = floor.tiles[y]?.[x];
+    if (!tile) {
+      return { ...defaultResult, message: '位置无效' };
+    }
+
+    if (tile.mined) {
+      return { ...defaultResult, message: '该位置已经挖掘过了' };
+    }
+
+    if (tile.type === 'wall' || tile.type === 'entry' || tile.type === 'exit' || tile.type === 'empty') {
+      return { ...defaultResult, message: '该位置无法挖掘' };
+    }
+
+    const staminaCost = getStaminaCost(tile);
+    if (session.stamina < staminaCost) {
+      return { ...defaultResult, message: `体力不足！需要${staminaCost}点体力` };
+    }
+
+    session.stamina -= staminaCost;
+    tile.mined = true;
+    revealAround(floor.tiles, x, y);
+
+    let mineralId: string | undefined;
+    let mineralName: string | undefined;
+    let coins = 0;
+    let quantity = 0;
+    const newDiscoveries: string[] = [];
+
+    if ((tile.type === 'ore' || tile.type === 'rare_ore') && tile.mineralId) {
+      const config = getMineralConfig(tile.mineralId);
+      mineralId = tile.mineralId;
+      mineralName = config?.name;
+      quantity = tile.type === 'rare_ore' ? 2 : 1;
+
+      if (inventory.value) {
+        inventory.value.addItem(mineralId, quantity);
+      }
+
+      addItemsToSession(session, mineralId, quantity);
+      statistics.value?.recordMineralMined(mineralId, quantity);
+
+      const discovery = codexSystem.value?.discoverMineral(mineralId, quantity);
+      if (discovery?.isNew) {
+        newDiscoveries.push(mineralId);
+      }
+
+      addNotification(`⛏️ 挖到了${quantity}个${config?.icon}${mineralName}！`, 'success');
+    } else if (tile.type === 'treasure' && tile.reward) {
+      if (tile.reward.coins) {
+        coins = tile.reward.coins;
+        shop.value?.addCoins(coins);
+        gameState.value!.coins = shop.value!.getCoins();
+        session.totalCoinsGained += coins;
+        statistics.value?.recordCoinsEarned(coins);
+        addNotification(`💰 发现宝箱！获得${coins}金币！`, 'success');
+      }
+    } else if (tile.type === 'mushroom' && tile.reward?.itemId) {
+      const mushQty = tile.reward.quantity || 1;
+      if (inventory.value) {
+        inventory.value.addItem(tile.reward.itemId, mushQty);
+      }
+      addItemsToSession(session, tile.reward.itemId, mushQty);
+      statistics.value?.recordItemDiscovered(tile.reward.itemId, mushQty);
+      codexSystem.value?.discoverItem(tile.reward.itemId, mushQty);
+      codexSystem.value?.discoverMineral(tile.reward.itemId, mushQty);
+      addNotification(`🍄 采集了${mushQty}个矿洞蘑菇！`, 'success');
+    } else if (tile.type === 'rock') {
+      addNotification('🪨 挖开了一块岩石', 'info');
+    }
+
+    checkAchievements();
+    saveGame();
+
+    return {
+      sessionId: session.id,
+      floor: session.currentFloor,
+      mineralId,
+      mineralName,
+      quantity,
+      coins,
+      staminaCost,
+      message: '挖掘成功',
+      tilesMined: 1,
+      reachedFloor: session.currentFloor,
+      newDiscoveries,
+      success: true
+    };
+  }
+
+  function buyMineStaminaPotion(): { success: boolean; message: string } {
+    const session = currentMineSession.value;
+    if (!session || !session.active) {
+      return { success: false, message: '没有进行中的矿洞探险' };
+    }
+    if (!shop.value) {
+      return { success: false, message: '系统未初始化' };
+    }
+
+    const coins = shop.value.getCoins();
+    if (coins < MINE_STAMINA_POTION_COST) {
+      return { success: false, message: `体力药水需要${MINE_STAMINA_POTION_COST}金币` };
+    }
+
+    shop.value.spendCoins(MINE_STAMINA_POTION_COST);
+    gameState.value!.coins = shop.value.getCoins();
+    statistics.value?.recordCoinsSpent(MINE_STAMINA_POTION_COST);
+
+    session.stamina = Math.min(session.maxStamina, session.stamina + MINE_STAMINA_POTION_AMOUNT);
+    addNotification(`🧪 使用体力药水，恢复${MINE_STAMINA_POTION_AMOUNT}点体力！`, 'success');
+    saveGame();
+    return { success: true, message: '体力恢复成功' };
+  }
+
+  function endMineExploration(completed: boolean = false) {
+    const session = currentMineSession.value;
+    if (!session) return;
+
+    session.active = false;
+
+    if (!completed) {
+      addNotification('🏃 结束矿洞探险，返回地面', 'info');
+    }
+
+    checkAchievements();
+    saveGame();
+  }
+
+  function exitMine() {
+    endMineExploration(false);
+    currentMineSession.value = null;
+    closeMiningModal();
+  }
+
   return {
     gameState,
     mapGrid,
@@ -1189,6 +1459,17 @@ export const useGameStore = defineStore('game', () => {
     dayTotalCrops,
     getInventoryItemCount,
     getQualitySellPrice,
-    getQualityStars
+    getQualityStars,
+    showMiningModal,
+    currentMineSession,
+    openMiningModal,
+    closeMiningModal,
+    startMineExploration,
+    getCurrentMineFloor,
+    moveInMine,
+    mineTile,
+    buyMineStaminaPotion,
+    exitMine,
+    endMineExploration
   };
 });

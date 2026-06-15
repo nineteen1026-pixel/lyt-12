@@ -10,6 +10,7 @@ import OrdersModal from './components/OrdersModal.vue';
 import BuildingsModal from './components/BuildingsModal.vue';
 import AchievementsModal from './components/AchievementsModal.vue';
 import CodexModal from './components/CodexModal.vue';
+import MiningModal from './components/MiningModal.vue';
 
 const gameStore = useGameStore();
 const isLoading = ref(true);
@@ -44,6 +45,7 @@ onMounted(async () => {
       <BuildingsModal />
       <AchievementsModal />
       <CodexModal />
+      <MiningModal />
       
       <div class="fixed top-4 right-4 flex flex-col gap-2 z-40">
         <transition-group name="notification">

@@ -230,6 +230,27 @@ export class AchievementSystem {
       case 'codexCompletion':
         current = codexCompletion || 0;
         break;
+      case 'mineExplorations':
+        current = stats.mineExplorations || 0;
+        break;
+      case 'totalMineralsMined':
+        current = stats.totalMineralsMined || 0;
+        break;
+      case 'mineralsMined':
+        current = itemId ? (stats.mineralsMined?.[itemId] || 0) : 0;
+        break;
+      case 'mineHighestFloorReached':
+        current = stats.mineHighestFloorReached || 0;
+        break;
+      case 'minesCleared':
+        current = stats.minesCleared || 0;
+        break;
+      case 'totalMineExplored':
+        current = stats.totalMineExplored || 0;
+        break;
+      case 'totalOresMined':
+        current = itemId ? (stats.totalOresMined?.[itemId] || 0) : 0;
+        break;
       default:
         current = 0;
     }

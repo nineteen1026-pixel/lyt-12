@@ -12,7 +12,8 @@ export const CODEX_CATEGORY_NAMES: Record<CodexCategory, string> = {
   building: '建筑',
   villager: '村民',
   fish: '鱼类',
-  artifact: '文物'
+  artifact: '文物',
+  mineral: '矿石'
 };
 
 export const CODEX_CATEGORY_ICONS: Record<CodexCategory, string> = {
@@ -22,7 +23,8 @@ export const CODEX_CATEGORY_ICONS: Record<CodexCategory, string> = {
   building: '🏠',
   villager: '👥',
   fish: '🐟',
-  artifact: '🏺'
+  artifact: '🏺',
+  mineral: '⛏️'
 };
 
 function createCropCodexEntries(): CodexEntry[] {
@@ -150,6 +152,36 @@ function createArtifactCodexEntries(): CodexEntry[] {
   }));
 }
 
+function createMineralCodexEntries(): CodexEntry[] {
+  const minerals = [
+    { id: 'coal', name: '煤矿', icon: '⬛', rarity: 'common' as const, description: '最常见的矿石，可用于燃料', hint: '在矿洞第1层即可发现' },
+    { id: 'copper', name: '铜矿', icon: '🟫', rarity: 'common' as const, description: '常见的金属矿石，呈红棕色', hint: '在矿洞第1层可以挖掘到' },
+    { id: 'iron', name: '铁矿', icon: '⬜', rarity: 'uncommon' as const, description: '坚硬的金属矿石，工业必备', hint: '深入矿洞第2层开始出现' },
+    { id: 'silver', name: '银矿', icon: '🔘', rarity: 'uncommon' as const, description: '闪亮的贵金属矿石', hint: '矿洞第3层以下可以找到' },
+    { id: 'gold', name: '金矿', icon: '🟨', rarity: 'rare' as const, description: '珍贵的黄金矿石', hint: '矿洞第4层以下有概率发现' },
+    { id: 'mithril', name: '秘银矿', icon: '🔷', rarity: 'rare' as const, description: '传说中的魔法金属', hint: '深入矿洞第5层才能寻觅' },
+    { id: 'ruby', name: '红宝石', icon: '🔴', rarity: 'epic' as const, description: '璀璨的红色宝石', hint: '矿洞第6层的珍稀宝石' },
+    { id: 'sapphire', name: '蓝宝石', icon: '🔵', rarity: 'epic' as const, description: '深邃的蓝色宝石', hint: '矿洞第6层的珍稀宝石' },
+    { id: 'emerald', name: '祖母绿', icon: '🟢', rarity: 'epic' as const, description: '翠绿的珍贵宝石', hint: '矿洞第6层的珍稀宝石' },
+    { id: 'adamantite', name: '精金矿', icon: '💠', rarity: 'epic' as const, description: '极其坚硬的稀有金属', hint: '矿洞第7层的极品金属' },
+    { id: 'diamond', name: '钻石', icon: '💎', rarity: 'legendary' as const, description: '最坚硬的珍贵宝石', hint: '传说在矿洞第8层才能发现' },
+    { id: 'dragonstone', name: '龙晶石', icon: '🔮', rarity: 'legendary' as const, description: '蕴含远古龙之力量的神秘晶石', hint: '仅在矿洞最深处第10层以下有极微概率出现' },
+    { id: 'mushroom', name: '矿洞蘑菇', icon: '🍄', rarity: 'common' as const, description: '在矿洞中生长的可食用蘑菇', hint: '在矿洞中偶尔能采集到' }
+  ];
+  
+  return minerals.map(mineral => ({
+    id: `mineral_${mineral.id}`,
+    name: mineral.name,
+    description: mineral.description,
+    icon: mineral.icon,
+    category: 'mineral' as const,
+    rarity: mineral.rarity,
+    discovered: false,
+    count: 0,
+    hint: mineral.hint
+  }));
+}
+
 export const CODEX_ENTRIES: CodexEntry[] = [
   ...createCropCodexEntries(),
   ...createAnimalCodexEntries(),
@@ -157,7 +189,8 @@ export const CODEX_ENTRIES: CodexEntry[] = [
   ...createBuildingCodexEntries(),
   ...createVillagerCodexEntries(),
   ...createFishCodexEntries(),
-  ...createArtifactCodexEntries()
+  ...createArtifactCodexEntries(),
+  ...createMineralCodexEntries()
 ];
 
 export const getCodexEntryById = (id: string): CodexEntry | undefined => {

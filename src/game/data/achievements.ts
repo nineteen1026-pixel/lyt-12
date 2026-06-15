@@ -370,3 +370,156 @@ export const getAchievementsByCategory = (category: AchievementCategory): Achiev
 export const getTotalAchievementCount = (): number => {
   return ACHIEVEMENTS.length;
 };
+
+ACHIEVEMENTS.push(
+  {
+    id: 'first_mine',
+    name: '初次下矿',
+    description: '完成第一次矿洞探险',
+    icon: '⛏️',
+    category: 'exploration',
+    rarity: 'common',
+    conditions: [{ type: 'mineExplorations', target: 1 }],
+    conditionLogic: 'all',
+    reward: { coins: 50, reputation: 5 }
+  },
+  {
+    id: 'miner_apprentice',
+    name: '矿工学徒',
+    description: '累计采集50个矿石',
+    icon: '🪨',
+    category: 'exploration',
+    rarity: 'common',
+    conditions: [{ type: 'totalMineralsMined', target: 50 }],
+    conditionLogic: 'all',
+    reward: { coins: 150, reputation: 10 }
+  },
+  {
+    id: 'floor_5',
+    name: '深入地层',
+    description: '到达矿洞第5层',
+    icon: '⬇️',
+    category: 'exploration',
+    rarity: 'uncommon',
+    conditions: [{ type: 'mineHighestFloorReached', target: 5 }],
+    conditionLogic: 'all',
+    reward: { coins: 200, reputation: 15 }
+  },
+  {
+    id: 'floor_10',
+    name: '地心探险',
+    description: '到达矿洞第10层',
+    icon: '🌋',
+    category: 'exploration',
+    rarity: 'rare',
+    conditions: [{ type: 'mineHighestFloorReached', target: 10 }],
+    conditionLogic: 'all',
+    reward: { coins: 500, reputation: 30 }
+  },
+  {
+    id: 'floor_12',
+    name: '矿洞征服者',
+    description: '征服矿洞全部12层',
+    icon: '🏔️',
+    category: 'exploration',
+    rarity: 'epic',
+    conditions: [{ type: 'mineHighestFloorReached', target: 12 }],
+    conditionLogic: 'all',
+    reward: { coins: 1000, reputation: 50, title: '矿洞征服者' }
+  },
+  {
+    id: 'gold_rush',
+    name: '淘金热',
+    description: '累计采集10个金矿',
+    icon: '🟨',
+    category: 'exploration',
+    rarity: 'uncommon',
+    conditions: [{ type: 'mineralsMined', itemId: 'gold', target: 10 }],
+    conditionLogic: 'all',
+    reward: { coins: 300, reputation: 15 }
+  },
+  {
+    id: 'gem_collector',
+    name: '宝石收藏家',
+    description: '采集红宝石、蓝宝石、祖母绿各1颗',
+    icon: '💍',
+    category: 'exploration',
+    rarity: 'rare',
+    conditions: [
+      { type: 'mineralsMined', itemId: 'ruby', target: 1 },
+      { type: 'mineralsMined', itemId: 'sapphire', target: 1 },
+      { type: 'mineralsMined', itemId: 'emerald', target: 1 }
+    ],
+    conditionLogic: 'all',
+    reward: { coins: 500, reputation: 25 }
+  },
+  {
+    id: 'diamond_hunter',
+    name: '钻石猎人',
+    description: '采集到第一颗钻石',
+    icon: '💎',
+    category: 'exploration',
+    rarity: 'epic',
+    conditions: [{ type: 'mineralsMined', itemId: 'diamond', target: 1 }],
+    conditionLogic: 'all',
+    reward: { coins: 800, reputation: 40, title: '钻石猎人' }
+  },
+  {
+    id: 'dragonstone_seeker',
+    name: '龙晶探寻者',
+    description: '采集到传说中的龙晶石',
+    icon: '🔮',
+    category: 'exploration',
+    rarity: 'legendary',
+    conditions: [{ type: 'mineralsMined', itemId: 'dragonstone', target: 1 }],
+    conditionLogic: 'all',
+    reward: { coins: 3000, reputation: 100, title: '龙晶探寻者' }
+  },
+  {
+    id: 'mineral_completionist',
+    name: '矿石全收集',
+    description: '采集所有种类的矿石',
+    icon: '📚',
+    category: 'exploration',
+    rarity: 'legendary',
+    secret: true,
+    conditions: [
+      { type: 'mineralsMined', itemId: 'coal', target: 1 },
+      { type: 'mineralsMined', itemId: 'copper', target: 1 },
+      { type: 'mineralsMined', itemId: 'iron', target: 1 },
+      { type: 'mineralsMined', itemId: 'silver', target: 1 },
+      { type: 'mineralsMined', itemId: 'gold', target: 1 },
+      { type: 'mineralsMined', itemId: 'mithril', target: 1 },
+      { type: 'mineralsMined', itemId: 'ruby', target: 1 },
+      { type: 'mineralsMined', itemId: 'sapphire', target: 1 },
+      { type: 'mineralsMined', itemId: 'emerald', target: 1 },
+      { type: 'mineralsMined', itemId: 'adamantite', target: 1 },
+      { type: 'mineralsMined', itemId: 'diamond', target: 1 },
+      { type: 'mineralsMined', itemId: 'dragonstone', target: 1 }
+    ],
+    conditionLogic: 'all',
+    reward: { coins: 5000, reputation: 150, title: '矿石百科全书' }
+  },
+  {
+    id: 'mine_cleared_10',
+    name: '探险达人',
+    description: '通关10次矿洞副本',
+    icon: '🏆',
+    category: 'exploration',
+    rarity: 'rare',
+    conditions: [{ type: 'minesCleared', target: 10 }],
+    conditionLogic: 'all',
+    reward: { coins: 600, reputation: 30 }
+  },
+  {
+    id: 'mining_magnate',
+    name: '矿业大亨',
+    description: '累计采集500个矿石',
+    icon: '💼',
+    category: 'exploration',
+    rarity: 'epic',
+    conditions: [{ type: 'totalMineralsMined', target: 500 }],
+    conditionLogic: 'all',
+    reward: { coins: 1500, reputation: 60, title: '矿业大亨' }
+  }
+);

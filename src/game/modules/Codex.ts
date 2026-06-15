@@ -130,7 +130,8 @@ export class CodexSystem {
       building: 'building_',
       villager: 'villager_',
       fish: 'fish_',
-      artifact: 'artifact_'
+      artifact: 'artifact_',
+      mineral: 'mineral_'
     };
 
     const entryId = `${prefixMap[category]}${itemId}`;
@@ -163,6 +164,14 @@ export class CodexSystem {
 
   discoverArtifact(artifactId: string): DiscoveryResult | null {
     return this.discoverByType('artifact', artifactId, 1);
+  }
+
+  discoverMineral(mineralId: string, count: number = 1): DiscoveryResult | null {
+    const result = this.discoverByType('mineral', mineralId, count);
+    if (result) {
+      this.discoverItem(mineralId, count);
+    }
+    return result;
   }
 
   isDiscovered(entryId: string): boolean {

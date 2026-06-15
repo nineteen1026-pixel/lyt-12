@@ -70,7 +70,7 @@ export interface Animal {
 export interface Item {
   id: string;
   name: string;
-  type: 'seed' | 'product' | 'animal';
+  type: 'seed' | 'product' | 'animal' | 'mineral' | 'resource';
   price: number;
   sellPrice: number;
   icon: string;
@@ -165,7 +165,7 @@ export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 
 export type AchievementCategory = 'farming' | 'animal' | 'building' | 'order' | 'economy' | 'exploration' | 'seasonal';
 
-export type CodexCategory = 'crop' | 'animal' | 'item' | 'building' | 'villager' | 'fish' | 'artifact';
+export type CodexCategory = 'crop' | 'animal' | 'item' | 'building' | 'villager' | 'fish' | 'artifact' | 'mineral';
 
 export interface AchievementCondition {
   type: string;
@@ -253,6 +253,13 @@ export interface GameStats {
   cropsByQuality: Record<QualityGrade, number>;
   highestQualityHarvested: QualityGrade;
   totalQualityBonusCoins: number;
+  totalMineExplored: number;
+  minesCleared: number;
+  totalMineralsMined: number;
+  mineralsMined: Record<string, number>;
+  mineHighestFloorReached: number;
+  totalOresMined: Record<string, number>;
+  mineExplorations: number;
 }
 
 export interface AchievementState {
@@ -325,3 +332,74 @@ export const QUALITY_WEIGHTS: Record<QualityGrade, number> = {
   4: 8,
   5: 2
 };
+
+export type MineTileType = 'empty' | 'rock' | 'ore' | 'rare_ore' | 'treasure' | 'exit' | 'entry' | 'wall' | 'mushroom' | 'crystal';
+
+export interface MineTile {
+  x: number;
+  y: number;
+  type: MineTileType;
+  mineralId?: string;
+  hardness: number;
+  mined: boolean;
+  revealed: boolean;
+  reward?: { coins?: number; itemId?: string; quantity?: number };
+}
+
+export interface MineFloor {
+  floor: number;
+  width: number;
+  height: number;
+  tiles: MineTile[][];
+  playerX: number;
+  playerY: number;
+  entryX: number;
+  entryY: number;
+  exitX: number;
+  exitY: number;
+  stamina: number;
+  maxStamina: number;
+  explored: boolean;
+  cleared: boolean;
+}
+
+export interface MineSession {
+  id: string;
+  currentFloor: number;
+  maxFloor: number;
+  floors: Record<number, MineFloor>;
+  stamina: number;
+  maxStamina: number;
+  startedAt: number;
+  totalCoinsGained: number;
+  totalItemsGained: Array<{ itemId: string; quantity: number }>;
+  active: boolean;
+}
+
+export interface MineralConfig {
+  id: string;
+  name: string;
+  rarity: Rarity;
+  icon: string;
+  sellPrice: number;
+  hardness: number;
+  minFloor: number;
+  weight: number;
+  description: string;
+}
+
+export interface MineExploreResult {
+  sessionId: string;
+  floor: number;
+  mineralId?: string;
+  mineralName?: string;
+  quantity: number;
+  coins?: number;
+  staminaCost: number;
+  message: string;
+  tilesMined: number;
+  clearedFloor?: boolean;
+  advancedFloor?: boolean;
+  reachedFloor: number;
+  newDiscoveries: string[];
+}
