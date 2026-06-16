@@ -126,6 +126,7 @@ export class CodexSystem {
     const prefixMap: Record<CodexCategory, string> = {
       crop: 'crop_',
       animal: 'animal_',
+      pet: 'pet_',
       item: 'item_',
       building: 'building_',
       villager: 'villager_',
@@ -144,6 +145,10 @@ export class CodexSystem {
 
   discoverAnimal(animalId: string, count: number = 1): DiscoveryResult | null {
     return this.discoverByType('animal', animalId, count);
+  }
+
+  discoverPet(petId: string, count: number = 1): DiscoveryResult | null {
+    return this.discoverByType('pet', petId, count);
   }
 
   discoverItem(itemId: string, count: number = 1, quality?: QualityGrade): DiscoveryResult | null {

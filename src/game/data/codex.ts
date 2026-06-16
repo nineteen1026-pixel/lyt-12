@@ -2,12 +2,14 @@ import type { CodexEntry, CodexCategory } from '../types/game';
 import { CROPS } from './crops';
 import { ITEMS } from './items';
 import { ANIMALS } from './animals';
+import { PETS } from './pets';
 import { BUILDINGS } from './buildings';
 import { VILLAGERS } from './orders';
 
 export const CODEX_CATEGORY_NAMES: Record<CodexCategory, string> = {
   crop: '作物',
   animal: '动物',
+  pet: '宠物',
   item: '物品',
   building: '建筑',
   villager: '村民',
@@ -19,6 +21,7 @@ export const CODEX_CATEGORY_NAMES: Record<CodexCategory, string> = {
 export const CODEX_CATEGORY_ICONS: Record<CodexCategory, string> = {
   crop: '🌾',
   animal: '🐾',
+  pet: '🐱',
   item: '📦',
   building: '🏠',
   villager: '👥',
@@ -182,9 +185,24 @@ function createMineralCodexEntries(): CodexEntry[] {
   }));
 }
 
+function createPetCodexEntries(): CodexEntry[] {
+  return Object.entries(PETS).map(([id, pet]) => ({
+    id: `pet_${id}`,
+    name: pet.name,
+    description: pet.description,
+    icon: pet.icon,
+    category: 'pet' as const,
+    rarity: id === 'fox' ? 'rare' : 'uncommon',
+    discovered: false,
+    count: 0,
+    hint: '从商店领养宠物来发现'
+  }));
+}
+
 export const CODEX_ENTRIES: CodexEntry[] = [
   ...createCropCodexEntries(),
   ...createAnimalCodexEntries(),
+  ...createPetCodexEntries(),
   ...createItemCodexEntries(),
   ...createBuildingCodexEntries(),
   ...createVillagerCodexEntries(),

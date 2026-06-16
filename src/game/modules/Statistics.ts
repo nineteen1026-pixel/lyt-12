@@ -1,4 +1,4 @@
-import type { GameStats, Season, OrderTier, QualityGrade, WeatherType, BuildingType } from '../types/game';
+import type { GameStats, Season, OrderTier, QualityGrade, WeatherType, BuildingType, PetType } from '../types/game';
 import { EXPERIENCE_REWARDS } from '../types/game';
 import type { SkillExperienceGain } from './SkillTree';
 
@@ -15,6 +15,8 @@ export const INITIAL_STATS: GameStats = {
   productsCollected: {},
   totalAnimalsOwned: 0,
   animalsOwned: {},
+  totalPetsAdopted: 0,
+  petsAdopted: { cat: 0, dog: 0, rabbit: 0, bird: 0, fox: 0 },
   totalBuildingsBuilt: 0,
   buildingsBuilt: {},
   totalOrdersCompleted: 0,
@@ -92,6 +94,7 @@ export type StatEventType =
   | 'product_collected'
   | 'animal_bought'
   | 'animal_sold'
+  | 'pet_adopted'
   | 'building_built'
   | 'building_demolished'
   | 'order_completed'
@@ -152,7 +155,8 @@ export class Statistics {
       cropsByQuality: { ...INITIAL_STATS.cropsByQuality, ...initialStats?.cropsByQuality },
       mineralsMined: { ...INITIAL_STATS.mineralsMined, ...initialStats?.mineralsMined },
       totalOresMined: { ...INITIAL_STATS.totalOresMined, ...initialStats?.totalOresMined },
-      disastersByType: { ...INITIAL_STATS.disastersByType, ...initialStats?.disastersByType }
+      disastersByType: { ...INITIAL_STATS.disastersByType, ...initialStats?.disastersByType },
+      petsAdopted: { ...INITIAL_STATS.petsAdopted, ...initialStats?.petsAdopted }
     };
     this.skillExperienceAccess = skillExperienceAccess || null;
   }
@@ -237,6 +241,14 @@ export class Statistics {
     this.stats.totalAnimalsOwned = Math.max(0, this.stats.totalAnimalsOwned - quantity);
     this.stats.animalsOwned[animalType] = Math.max(0, (this.stats.animalsOwned[animalType] || 0) - quantity);
     this.notify(this.createEvent('animal_sold', { animalType, quantity }));
+  }
+
+  recordPetAdopted(petType: PetType, quantity: number = 1): SkillExperienceGain | null {
+    this.stats.totalPetsAdopted += quantity;
+    this.stats.petsAdopted[petType] = (this.stats.petsAdopted[petType] || 0) + quantity;
+    const expGain = this.addSkillExperience('pet_adopted', quantity);
+    this.notify(this.createEvent('pet_adopted', { petType, quantity, expGain }));
+    return expGain;
   }
 
   recordBuildingBuilt(buildingType: string) {

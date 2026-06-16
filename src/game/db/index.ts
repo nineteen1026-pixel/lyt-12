@@ -1,6 +1,6 @@
 import { openDB, IDBPDatabase } from 'idb';
 import { DB_CONFIG, STORE_CONFIGS, INITIAL_GAME_STATE, INITIAL_REPUTATION, type DBStores } from './schema';
-import type { GameState, Plot, Animal, InventoryItem, Order, Building, GameStats, AchievementProgress, CodexEntry, SkillTreeState } from '../types/game';
+import type { GameState, Plot, Animal, Pet, InventoryItem, Order, Building, GameStats, AchievementProgress, CodexEntry, SkillTreeState } from '../types/game';
 import { GRID_WIDTH, GRID_HEIGHT, INITIAL_UNLOCKED } from '../types/game';
 import { INITIAL_STATS } from '../modules/Statistics';
 import { INITIAL_SKILL_TREE_STATE } from '../modules/SkillTree';
@@ -97,6 +97,36 @@ class GameDatabase {
   async getAllAnimals(): Promise<Animal[]> {
     const db = this.ensureDB();
     return await db.getAll('animals');
+  }
+
+  async savePet(pet: Pet): Promise<void> {
+    const db = this.ensureDB();
+    const clone = JSON.parse(JSON.stringify(pet));
+    await db.put('pets', clone);
+  }
+
+  async saveAllPets(pets: Pet[]): Promise<void> {
+    const db = this.ensureDB();
+    const clones = JSON.parse(JSON.stringify(pets));
+    const tx = db.transaction('pets', 'readwrite');
+    await Promise.all([
+      ...clones.map((pet: Pet) => tx.store.put(pet)),
+      tx.done
+    ]);
+  }
+
+  async getAllPets(): Promise<Pet[]> {
+    const db = this.ensureDB();
+    try {
+      return await db.getAll('pets');
+    } catch (e) {
+      return [];
+    }
+  }
+
+  async deletePet(petId: string): Promise<void> {
+    const db = this.ensureDB();
+    await db.delete('pets', petId);
   }
 
   async saveInventoryItem(item: InventoryItem): Promise<void> {
@@ -259,6 +289,7 @@ class GameDatabase {
     state: GameState;
     plots: Plot[];
     animals: Animal[];
+    pets: Pet[];
     inventory: InventoryItem[];
     orders: Order[];
     buildings: Building[];
@@ -309,6 +340,7 @@ class GameDatabase {
     state.lastOrderRefreshDay = 0;
 
     const animals: Animal[] = [];
+    const pets: Pet[] = [];
     const inventory: InventoryItem[] = [
       { itemId: 'turnip_seed', quantity: 5 },
       { itemId: 'potato_seed', quantity: 3 }
@@ -333,6 +365,7 @@ class GameDatabase {
     await this.saveGameState(state);
     await this.saveAllPlots(plots);
     await this.saveAllAnimals(animals);
+    await this.saveAllPets(pets);
     await this.saveAllInventory(inventory);
     await this.saveAllOrders(orders);
     await this.saveAllBuildings(buildings);
@@ -341,13 +374,14 @@ class GameDatabase {
     await this.saveAllCodexEntries(codex);
     await this.saveSkillTree(skillTree);
 
-    return { state, plots, animals, inventory, orders, buildings, stats, achievements, codex, skillTree };
+    return { state, plots, animals, pets, inventory, orders, buildings, stats, achievements, codex, skillTree };
   }
 
   async loadGame(): Promise<{
     state: GameState;
     plots: Plot[];
     animals: Animal[];
+    pets: Pet[];
     inventory: InventoryItem[];
     orders: Order[];
     buildings: Building[];
@@ -388,6 +422,7 @@ class GameDatabase {
 
     const plots = await this.getAllPlots();
     const animals = await this.getAllAnimals();
+    const pets = await this.getAllPets();
     const inventory = await this.getAllInventory();
     let orders: Order[] = [];
     try {
@@ -402,13 +437,14 @@ class GameDatabase {
     const codex = await this.getAllCodexEntries();
     const skillTree = await this.getSkillTree();
 
-    return { state, plots, animals, inventory, orders, buildings, stats, achievements, codex, skillTree };
+    return { state, plots, animals, pets, inventory, orders, buildings, stats, achievements, codex, skillTree };
   }
 
   async saveCompleteGame(
     state: GameState,
     plots: Plot[],
     animals: Animal[],
+    pets: Pet[],
     inventory: InventoryItem[],
     orders: Order[],
     buildings: Building[],
@@ -420,6 +456,7 @@ class GameDatabase {
     await this.saveGameState(state);
     await this.saveAllPlots(plots);
     await this.saveAllAnimals(animals);
+    await this.saveAllPets(pets);
     await this.saveAllInventory(inventory);
     await this.saveAllOrders(orders);
     await this.saveAllBuildings(buildings);

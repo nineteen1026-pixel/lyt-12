@@ -185,7 +185,7 @@ export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 
 export type AchievementCategory = 'farming' | 'animal' | 'building' | 'order' | 'economy' | 'exploration' | 'seasonal' | 'disaster';
 
-export type CodexCategory = 'crop' | 'animal' | 'item' | 'building' | 'villager' | 'fish' | 'artifact' | 'mineral';
+export type CodexCategory = 'crop' | 'animal' | 'pet' | 'item' | 'building' | 'villager' | 'fish' | 'artifact' | 'mineral';
 
 export interface AchievementCondition {
   type: string;
@@ -248,6 +248,8 @@ export interface GameStats {
   productsCollected: Record<string, number>;
   totalAnimalsOwned: number;
   animalsOwned: Record<string, number>;
+  totalPetsAdopted: number;
+  petsAdopted: Record<PetType, number>;
   totalBuildingsBuilt: number;
   buildingsBuilt: Record<string, number>;
   totalOrdersCompleted: number;
@@ -527,4 +529,62 @@ export const EXPERIENCE_REWARDS: Record<string, number> = {
   quality_harvest_3: 4,
   quality_harvest_4: 8,
   quality_harvest_5: 16,
+  pet_adopted: 25,
+  pet_petted: 5,
 };
+
+export type PetType = 'cat' | 'dog' | 'rabbit' | 'bird' | 'fox';
+
+export type PetBonusType =
+  | 'crop_growth_speed'
+  | 'crop_yield'
+  | 'crop_quality'
+  | 'animal_production_speed'
+  | 'animal_yield'
+  | 'animal_quality'
+  | 'water_bonus'
+  | 'feed_bonus'
+  | 'rare_chance';
+
+export interface PetBonus {
+  type: PetBonusType;
+  value: number;
+  range?: number;
+}
+
+export interface PetConfig {
+  id: string;
+  type: PetType;
+  name: string;
+  description: string;
+  price: number;
+  icon: string;
+  color: string;
+  bonuses: PetBonus[];
+  happinessDecayRate: number;
+  maxHappinessBonus: number;
+}
+
+export interface Pet {
+  id: string;
+  type: PetType;
+  name: string;
+  adoptedAt: number;
+  isActive: boolean;
+  happiness: number;
+  lastPetTime: number;
+  feedCount?: number;
+}
+
+export interface PetCompanionBonus {
+  cropGrowthSpeed: number;
+  cropYield: number;
+  cropQuality: number;
+  animalProductionSpeed: number;
+  animalYield: number;
+  animalQuality: number;
+  waterBonus: number;
+  feedBonus: number;
+  greenhouseBoost: number;
+  rareChance: number;
+}

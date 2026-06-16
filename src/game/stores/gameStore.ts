@@ -1,10 +1,11 @@
 import { defineStore } from 'pinia';
 import { ref, computed, toRaw } from 'vue';
-import type { GameState, Plot, Animal, InventoryItem, ToolType, Season, WeatherType, WeatherState, WeatherSeverity, WeatherWarning, Order, Building, BuildingType, BuildingConfig, GameStats, AchievementProgress, CodexEntry, QualityGrade, SkillTreeState, SkillEffectBonus, SkillNode, LevelUpResult } from '../types/game';
+import type { GameState, Plot, Animal, Pet, PetType, InventoryItem, ToolType, Season, WeatherType, WeatherState, WeatherSeverity, WeatherWarning, Order, Building, BuildingType, BuildingConfig, GameStats, AchievementProgress, CodexEntry, QualityGrade, SkillTreeState, SkillEffectBonus, SkillNode, LevelUpResult, PetCompanionBonus } from '../types/game';
 import { QUALITY_PRICE_MULTIPLIER, QUALITY_NAMES, DAY_DURATION } from '../types/game';
 import { MapGrid } from '../modules/MapGrid';
 import { CropGrowth } from '../modules/CropGrowth';
 import { Livestock } from '../modules/Livestock';
+import { PetCompanion, HAPPINESS_PER_FEED } from '../modules/PetCompanion';
 import { Inventory } from '../modules/Inventory';
 import { Shop } from '../modules/Shop';
 import { Weather } from '../modules/Weather';
@@ -21,6 +22,7 @@ import { gameDB } from '../db';
 import { getItem } from '../data/items';
 import { getCropConfig } from '../data/crops';
 import { getAnimalConfig } from '../data/animals';
+import { getPetConfig, getPetPrice, getAllPetConfigs } from '../data/pets';
 import { getVillagerById, getReputationLevel } from '../data/orders';
 import { getBuildingConfig } from '../data/buildings';
 import { ACHIEVEMENTS, getAchievementById } from '../data/achievements';
@@ -34,6 +36,7 @@ export const useGameStore = defineStore('game', () => {
   const mapGrid = ref<MapGrid | null>(null);
   const cropGrowth = ref<CropGrowth | null>(null);
   const livestock = ref<Livestock | null>(null);
+  const petCompanion = ref<PetCompanion | null>(null);
   const inventory = ref<Inventory | null>(null);
   const shop = ref<Shop | null>(null);
   const weather = ref<Weather | null>(null);
@@ -83,6 +86,25 @@ export const useGameStore = defineStore('game', () => {
   const hasBarn = computed(() => buildings.value?.hasBarn() ?? false);
   const barnCapacityBonus = computed(() => buildings.value?.getBarnCapacityBonus() ?? 0);
 
+  const pets = computed(() => petCompanion.value?.getPets() ?? []);
+  const activePet = computed(() => petCompanion.value?.getActivePet());
+  const petCount = computed(() => petCompanion.value?.getPetCount() ?? { cat: 0, dog: 0, rabbit: 0, bird: 0, fox: 0 });
+  const totalPetCount = computed(() => petCompanion.value?.getTotalPetCount() ?? 0);
+  const petBonuses = computed<PetCompanionBonus>(() => petCompanion.value?.getActiveBonuses() ?? {
+    cropGrowthSpeed: 0, cropYield: 0, cropQuality: 0,
+    animalProductionSpeed: 0, animalYield: 0, animalQuality: 0,
+    waterBonus: 0, feedBonus: 0, greenhouseBoost: 0, rareChance: 0
+  });
+  const combinedEffectBonus = computed<SkillEffectBonus>(() => {
+    const skillBonus = skillTree.value?.getEffectBonus() ?? null;
+    return petCompanion.value?.combineWithSkillBonus(skillBonus) ?? skillBonus ?? {
+      cropGrowthSpeed: 0, cropYield: 0, cropQuality: 0,
+      animalProductionSpeed: 0, animalYield: 0, animalQuality: 0,
+      waterBonus: 0, feedBonus: 0, rareChance: 0,
+      greenhouseBoost: 0
+    };
+  });
+
   const stats = computed<GameStats | null>(() => statistics.value?.getStats() ?? null);
   const skillTreeState = computed<SkillTreeState | null>(() => skillTree.value?.getState() ?? null);
   const skillTreeLevel = computed(() => skillTree.value?.getLevel() ?? 1);
@@ -100,6 +122,12 @@ export const useGameStore = defineStore('game', () => {
   const discoveredCodexCount = computed(() => codexSystem.value?.getDiscoveredCount() ?? 0);
   const totalCodexCount = computed(() => codexSystem.value?.getTotalCount() ?? 0);
   const codexCompletionPercentage = computed(() => codexSystem.value?.getCompletionPercentage() ?? 0);
+
+  const combinedBonusAccess = {
+    getSkillBonus: (): SkillEffectBonus => {
+      return combinedEffectBonus.value;
+    }
+  };
   
   const showAchievements = ref(false);
   const showCodex = ref(false);
@@ -143,6 +171,7 @@ export const useGameStore = defineStore('game', () => {
       
       cropGrowth.value = new CropGrowth(mapGrid.value.getPlotGrid(), buildings.value);
       livestock.value = new Livestock(savedGame.animals);
+      petCompanion.value = new PetCompanion(savedGame.pets);
       inventory.value = new Inventory(savedGame.inventory, buildings.value);
       weather.value = new Weather(savedGame.state.weather, savedGame.state.season, buildings.value);
       if (weather.value.getForecast().length === 0) {
@@ -197,10 +226,13 @@ export const useGameStore = defineStore('game', () => {
       );
 
       if (cropGrowth.value) {
-        cropGrowth.value.setSkillAccess(skillTree.value);
+        cropGrowth.value.setSkillAccess(combinedBonusAccess);
       }
       if (livestock.value) {
-        livestock.value.setSkillAccess(skillTree.value);
+        livestock.value.setSkillAccess(combinedBonusAccess);
+      }
+      if (petCompanion.value) {
+        petCompanion.value.setSkillAccess(skillTree.value);
       }
 
       skillTree.value.subscribe(handleSkillTreeChanged);
@@ -252,6 +284,7 @@ export const useGameStore = defineStore('game', () => {
 
         const cropUpdates = cropGrowth.value.processOfflineGrowth(offlineMs, now);
         const animalUpdates = livestock.value.processOfflineProduction(offlineMs, now);
+        petCompanion.value.processOfflineTime(offlineMs, now);
 
         const expiredOrders = orders.value.checkAndProcessExpiredOrders();
         if (expiredOrders.length > 0) {
@@ -323,6 +356,7 @@ export const useGameStore = defineStore('game', () => {
 
       cropGrowth.value = new CropGrowth(mapGrid.value.getPlotGrid(), buildings.value);
       livestock.value = new Livestock(newGame.animals);
+      petCompanion.value = new PetCompanion(newGame.pets);
       inventory.value = new Inventory(newGame.inventory, buildings.value);
       weather.value = new Weather(newGame.state.weather, newGame.state.season, buildings.value);
       if (weather.value.getForecast().length === 0) {
@@ -369,10 +403,13 @@ export const useGameStore = defineStore('game', () => {
       );
 
       if (cropGrowth.value) {
-        cropGrowth.value.setSkillAccess(skillTree.value);
+        cropGrowth.value.setSkillAccess(combinedBonusAccess);
       }
       if (livestock.value) {
-        livestock.value.setSkillAccess(skillTree.value);
+        livestock.value.setSkillAccess(combinedBonusAccess);
+      }
+      if (petCompanion.value) {
+        petCompanion.value.setSkillAccess(skillTree.value);
       }
 
       skillTree.value.subscribe(handleSkillTreeChanged);
@@ -617,7 +654,7 @@ export const useGameStore = defineStore('game', () => {
   }
 
   async function saveGame() {
-    if (!gameState.value || !mapGrid.value || !livestock.value || !inventory.value || !shop.value || !weather.value || !orders.value || !buildings.value || !statistics.value || !skillTree.value || !achievementSystem.value || !codexSystem.value) {
+    if (!gameState.value || !mapGrid.value || !livestock.value || !petCompanion.value || !inventory.value || !shop.value || !weather.value || !orders.value || !buildings.value || !statistics.value || !skillTree.value || !achievementSystem.value || !codexSystem.value) {
       return;
     }
 
@@ -632,6 +669,7 @@ export const useGameStore = defineStore('game', () => {
     const rawState = JSON.parse(JSON.stringify(toRaw(gameState.value)));
     const rawPlots = JSON.parse(JSON.stringify(toRaw(mapGrid.value.getAllPlots())));
     const rawAnimals = JSON.parse(JSON.stringify(toRaw(livestock.value.getAnimals())));
+    const rawPets = JSON.parse(JSON.stringify(toRaw(petCompanion.value.getPets())));
     const rawInventory = JSON.parse(JSON.stringify(toRaw(inventory.value.getInventoryItems())));
     const rawOrders = JSON.parse(JSON.stringify(toRaw(orders.value.getOrders())));
     const rawBuildings = JSON.parse(JSON.stringify(toRaw(buildings.value.getBuildings())));
@@ -644,6 +682,7 @@ export const useGameStore = defineStore('game', () => {
       rawState,
       rawPlots,
       rawAnimals,
+      rawPets,
       rawInventory,
       rawOrders,
       rawBuildings,
@@ -962,6 +1001,129 @@ export const useGameStore = defineStore('game', () => {
     return result;
   }
 
+  function adoptPet(type: PetType): { success: boolean; message: string; pet?: Pet } {
+    if (!petCompanion.value || !shop.value || !gameState.value || !skillTree.value) {
+      return { success: false, message: '系统未初始化' };
+    }
+
+    const price = getPetPrice(type);
+    if (gameState.value.coins < price) {
+      return { success: false, message: '金币不足' };
+    }
+
+    const pet = petCompanion.value.adoptPet(type);
+    if (!pet) {
+      return { success: false, message: '领养失败' };
+    }
+
+    shop.value.spendCoins(price);
+    gameState.value.coins = shop.value.getCoins();
+
+    if (statistics.value) {
+      statistics.value.recordCoinsSpent(price);
+      statistics.value.recordPetAdopted(type);
+    }
+    if (codexSystem.value) {
+      codexSystem.value.discoverPet(type, 1);
+    }
+
+    checkAchievements();
+    saveGame();
+
+    const config = getPetConfig(type);
+    addNotification(`恭喜领养了${config?.name || '宠物'}！`, 'success');
+    return { success: true, message: '领养成功', pet };
+  }
+
+  function releasePet(petId: string): { success: boolean; message: string } {
+    if (!petCompanion.value) {
+      return { success: false, message: '系统未初始化' };
+    }
+
+    const pet = petCompanion.value.getPet(petId);
+    if (!pet) {
+      return { success: false, message: '宠物不存在' };
+    }
+
+    const result = petCompanion.value.releasePet(petId);
+    if (result) {
+      addNotification(`已释放${pet.name}`, 'info');
+      saveGame();
+      return { success: true, message: '释放成功' };
+    }
+    return { success: false, message: '释放失败' };
+  }
+
+  function setActivePet(petId: string): { success: boolean; message: string } {
+    if (!petCompanion.value) {
+      return { success: false, message: '系统未初始化' };
+    }
+
+    const result = petCompanion.value.setActivePet(petId);
+    if (result) {
+      const pet = petCompanion.value.getPet(petId);
+      addNotification(`${pet?.name || '宠物'}现在随行了！`, 'success');
+      saveGame();
+      return { success: true, message: '设置成功' };
+    }
+    return { success: false, message: '设置失败' };
+  }
+
+  function petAnimal(petId: string): { success: boolean; message: string; happinessGained?: number; remainingCooldown?: number } {
+    if (!petCompanion.value || !skillTree.value) {
+      return { success: false, message: '系统未初始化' };
+    }
+
+    const result = petCompanion.value.petAnimal(petId);
+    if (result.success) {
+      if (skillTree.value) {
+        skillTree.value.addExperience(5, 'pet_petted');
+      }
+      saveGame();
+      return { success: true, message: `抚摸成功！亲密度+${result.happinessGained}`, happinessGained: result.happinessGained };
+    } else if (result.remainingCooldown > 0) {
+      return { success: false, message: `冷却中，还需${result.remainingCooldown}秒`, remainingCooldown: result.remainingCooldown };
+    }
+    return { success: false, message: '抚摸失败' };
+  }
+
+  function feedPet(petId: string): { success: boolean; message: string } {
+    if (!petCompanion.value) {
+      return { success: false, message: '系统未初始化' };
+    }
+
+    const result = petCompanion.value.feedPet(petId);
+    if (result) {
+      const pet = petCompanion.value.getPet(petId);
+      addNotification(`喂食${pet?.name || '宠物'}成功！亲密度+${HAPPINESS_PER_FEED}`, 'success');
+      saveGame();
+      return { success: true, message: '喂食成功' };
+    }
+    return { success: false, message: '喂食失败' };
+  }
+
+  function getPetCooldown(petId: string): number {
+    return petCompanion.value?.getPetCooldown(petId) ?? 0;
+  }
+
+  function renamePet(petId: string, newName: string): { success: boolean; message: string } {
+    if (!petCompanion.value) {
+      return { success: false, message: '系统未初始化' };
+    }
+
+    const result = petCompanion.value.renamePet(petId, newName);
+    if (result) {
+      addNotification(`宠物已改名为${newName}`, 'success');
+      saveGame();
+      return { success: true, message: '改名成功' };
+    }
+    return { success: false, message: '改名失败' };
+  }
+
+  function getBuyablePets() {
+    return getAllPetConfigs();
+  }
+
   function updateGame(time: number, deltaTime: number = 0) {
     if (!mapGrid.value || !cropGrowth.value || !livestock.value || !weather.value || !orders.value || !gameState.value || !shop.value || !inventory.value) {
       return;
@@ -1061,6 +1223,7 @@ export const useGameStore = defineStore('game', () => {
 
     cropGrowth.value.updateAllCrops(time);
     livestock.value.updateAllProduction(time);
+    petCompanion.value?.updateAll(time);
   }
 
   function recordDisasterStats(weather: WeatherType, severity: WeatherSeverity, effects: WeatherEffects) {
