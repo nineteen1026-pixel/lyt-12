@@ -1,4 +1,4 @@
-import type { Achievement, AchievementProgress, GameStats, AchievementCondition, AchievementReward } from '../types/game';
+import type { Achievement, AchievementProgress, GameStats, AchievementCondition, AchievementReward, WeatherType } from '../types/game';
 import { ACHIEVEMENTS, getAchievementById } from '../data/achievements';
 
 export interface AchievementUnlockResult {
@@ -250,6 +250,66 @@ export class AchievementSystem {
         break;
       case 'totalOresMined':
         current = itemId ? (stats.totalOresMined?.[itemId] || 0) : 0;
+        break;
+      case 'weatherWarningsReceived':
+        current = stats.weatherWarningsReceived || 0;
+        break;
+      case 'weatherWarningsActed':
+        current = stats.weatherWarningsActed || 0;
+        break;
+      case 'disastersByType':
+        current = itemId ? (stats.disastersByType?.[itemId as WeatherType] || 0) : 0;
+        break;
+      case 'severeDisastersSurvived':
+        current = stats.severeDisastersSurvived || 0;
+        break;
+      case 'droughtsSurvived':
+        current = stats.droughtsSurvived || 0;
+        break;
+      case 'heatwavesSurvived':
+        current = stats.heatwavesSurvived || 0;
+        break;
+      case 'severeStormsSurvived':
+        current = stats.severeStormsSurvived || 0;
+        break;
+      case 'severeFrostsSurvived':
+        current = stats.severeFrostsSurvived || 0;
+        break;
+      case 'cropsSavedByGreenhouse':
+        current = stats.cropsSavedByGreenhouse || 0;
+        break;
+      case 'cropsSavedBySprinkler':
+        current = stats.cropsSavedBySprinkler || 0;
+        break;
+      case 'cropsSavedByLightningRod':
+        current = stats.cropsSavedByLightningRod || 0;
+        break;
+      case 'cropsSavedByHeater':
+        current = stats.cropsSavedByHeater || 0;
+        break;
+      case 'cropsSavedByDrainage':
+        current = stats.cropsSavedByDrainage || 0;
+        break;
+      case 'totalCropsSavedByBuildings':
+        current = stats.totalCropsSavedByBuildings || 0;
+        break;
+      case 'perfectDisasterDefense':
+        current = stats.perfectDisasterDefense || 0;
+        break;
+      case 'cropsLostToStorms':
+        current = stats.cropsLostToStorms || 0;
+        break;
+      case 'cropsLostToFrost':
+        current = stats.cropsLostToFrost || 0;
+        break;
+      case 'cropsLostToDrought':
+        current = stats.cropsLostToDrought || 0;
+        break;
+      case 'cropsLostToHeatwave':
+        current = stats.cropsLostToHeatwave || 0;
+        break;
+      case 'totalCropsLostToDisasters':
+        current = stats.totalCropsLostToDisasters || 0;
         break;
       default:
         current = 0;

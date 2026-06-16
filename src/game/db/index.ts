@@ -274,7 +274,9 @@ class GameDatabase {
       lastSeasonAdvance: now,
       weather: {
         current: 'sunny',
+        currentSeverity: 'normal',
         forecast: [],
+        forecastSeverities: [],
         lastWeatherChange: now,
         lastDayWeather: now
       }
@@ -362,10 +364,16 @@ class GameDatabase {
       const now = Date.now();
       state.weather = {
         current: 'sunny',
+        currentSeverity: 'normal',
         forecast: [],
+        forecastSeverities: [],
         lastWeatherChange: now,
         lastDayWeather: now
       };
+    } else {
+      const wAny = state.weather as any;
+      if (!wAny.currentSeverity) wAny.currentSeverity = 'normal';
+      if (!wAny.forecastSeverities) wAny.forecastSeverities = [];
     }
 
     if (!state.reputation) {

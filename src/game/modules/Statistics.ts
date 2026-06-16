@@ -1,4 +1,4 @@
-import type { GameStats, Season, OrderTier, QualityGrade } from '../types/game';
+import type { GameStats, Season, OrderTier, QualityGrade, WeatherType, BuildingType } from '../types/game';
 import { EXPERIENCE_REWARDS } from '../types/game';
 import type { SkillExperienceGain } from './SkillTree';
 
@@ -56,10 +56,37 @@ export const INITIAL_STATS: GameStats = {
   mineralsMined: {},
   mineHighestFloorReached: 0,
   totalOresMined: {},
-  mineExplorations: 0
+  mineExplorations: 0,
+  weatherWarningsReceived: 0,
+  weatherWarningsActed: 0,
+  disastersByType: {
+    sunny: 0,
+    rainy: 0,
+    snowy: 0,
+    stormy: 0,
+    drought: 0,
+    heatwave: 0
+  },
+  severeDisastersSurvived: 0,
+  droughtsSurvived: 0,
+  heatwavesSurvived: 0,
+  severeStormsSurvived: 0,
+  severeFrostsSurvived: 0,
+  cropsSavedByGreenhouse: 0,
+  cropsSavedBySprinkler: 0,
+  cropsSavedByLightningRod: 0,
+  cropsSavedByHeater: 0,
+  cropsSavedByDrainage: 0,
+  totalCropsSavedByBuildings: 0,
+  perfectDisasterDefense: 0,
+  cropsLostToStorms: 0,
+  cropsLostToFrost: 0,
+  cropsLostToDrought: 0,
+  cropsLostToHeatwave: 0,
+  totalCropsLostToDisasters: 0
 };
 
-export type StatEventType = 
+export type StatEventType =
   | 'crop_harvested'
   | 'seed_planted'
   | 'product_collected'
@@ -88,7 +115,14 @@ export type StatEventType =
   | 'mineral_mined'
   | 'mine_floor_reached'
   | 'mine_cleared'
-  | 'mine_exploration';
+  | 'mine_exploration'
+  | 'weather_warning_received'
+  | 'weather_warning_acted'
+  | 'disaster_occurred'
+  | 'severe_disaster_survived'
+  | 'crops_saved_by_building'
+  | 'crops_lost_to_disaster'
+  | 'perfect_disaster_defense';
 
 export interface StatEvent {
   type: StatEventType;
@@ -117,7 +151,8 @@ export class Statistics {
       artifactsDiscovered: { ...INITIAL_STATS.artifactsDiscovered, ...initialStats?.artifactsDiscovered },
       cropsByQuality: { ...INITIAL_STATS.cropsByQuality, ...initialStats?.cropsByQuality },
       mineralsMined: { ...INITIAL_STATS.mineralsMined, ...initialStats?.mineralsMined },
-      totalOresMined: { ...INITIAL_STATS.totalOresMined, ...initialStats?.totalOresMined }
+      totalOresMined: { ...INITIAL_STATS.totalOresMined, ...initialStats?.totalOresMined },
+      disastersByType: { ...INITIAL_STATS.disastersByType, ...initialStats?.disastersByType }
     };
     this.skillExperienceAccess = skillExperienceAccess || null;
   }
@@ -357,5 +392,80 @@ export class Statistics {
   recordMineExploration() {
     this.stats.mineExplorations++;
     this.notify(this.createEvent('mine_exploration', {}));
+  }
+
+  recordWeatherWarningReceived() {
+    this.stats.weatherWarningsReceived += 1;
+    this.notify(this.createEvent('weather_warning_received', {}));
+  }
+
+  recordWeatherWarningActed() {
+    this.stats.weatherWarningsActed += 1;
+    this.notify(this.createEvent('weather_warning_acted', {}));
+  }
+
+  recordDisasterOccurred(weather: WeatherType, isSevere: boolean) {
+    this.stats.disastersByType[weather] = (this.stats.disastersByType[weather] || 0) + 1;
+    this.notify(this.createEvent('disaster_occurred', { weather, isSevere }));
+
+    if (isSevere) {
+      this.stats.severeDisastersSurvived += 1;
+      if (weather === 'stormy') this.stats.severeStormsSurvived += 1;
+      if (weather === 'snowy') this.stats.severeFrostsSurvived += 1;
+      if (weather === 'drought') this.stats.droughtsSurvived += 1;
+      if (weather === 'heatwave') this.stats.heatwavesSurvived += 1;
+      this.notify(this.createEvent('severe_disaster_survived', { weather }));
+    } else {
+      if (weather === 'drought') this.stats.droughtsSurvived += 1;
+      if (weather === 'heatwave') this.stats.heatwavesSurvived += 1;
+    }
+  }
+
+  recordCropsSavedByBuilding(building: BuildingType, count: number) {
+    if (count <= 0) return;
+    switch (building) {
+      case 'greenhouse':
+        this.stats.cropsSavedByGreenhouse += count;
+        break;
+      case 'sprinkler':
+        this.stats.cropsSavedBySprinkler += count;
+        break;
+      case 'lightning_rod':
+        this.stats.cropsSavedByLightningRod += count;
+        break;
+      case 'heater':
+        this.stats.cropsSavedByHeater += count;
+        break;
+      case 'drainage':
+        this.stats.cropsSavedByDrainage += count;
+        break;
+    }
+    this.stats.totalCropsSavedByBuildings += count;
+    this.notify(this.createEvent('crops_saved_by_building', { building, count }));
+  }
+
+  recordCropsLostToDisaster(weather: WeatherType, count: number) {
+    if (count <= 0) return;
+    switch (weather) {
+      case 'stormy':
+        this.stats.cropsLostToStorms += count;
+        break;
+      case 'snowy':
+        this.stats.cropsLostToFrost += count;
+        break;
+      case 'drought':
+        this.stats.cropsLostToDrought += count;
+        break;
+      case 'heatwave':
+        this.stats.cropsLostToHeatwave += count;
+        break;
+    }
+    this.stats.totalCropsLostToDisasters += count;
+    this.notify(this.createEvent('crops_lost_to_disaster', { weather, count }));
+  }
+
+  recordPerfectDisasterDefense() {
+    this.stats.perfectDisasterDefense += 1;
+    this.notify(this.createEvent('perfect_disaster_defense', {}));
   }
 }

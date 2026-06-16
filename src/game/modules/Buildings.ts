@@ -291,6 +291,128 @@ export class Buildings {
     return count;
   }
 
+  getLightningRodPlots(): Array<{ x: number; y: number }> {
+    return this.getProtectionPlots('lightning_rod', 'lightningRodRange');
+  }
+
+  getHeaterPlots(): Array<{ x: number; y: number }> {
+    return this.getProtectionPlots('heater', 'heaterRange');
+  }
+
+  getDrainagePlots(): Array<{ x: number; y: number }> {
+    return this.getProtectionPlots('drainage', 'drainageRange');
+  }
+
+  private getProtectionPlots(
+    buildingType: BuildingType,
+    rangeKey: 'lightningRodRange' | 'heaterRange' | 'drainageRange'
+  ): Array<{ x: number; y: number }> {
+    const plots: Array<{ x: number; y: number }> = [];
+    const processed = new Set<string>();
+
+    for (const building of this.buildings.values()) {
+      if (building.type !== buildingType) continue;
+
+      const config = getBuildingConfig(building.type);
+      const range = config?.effect[rangeKey] ?? 1;
+
+      const cx = building.x + Math.floor((config?.footprint.width ?? 1) / 2);
+      const cy = building.y + Math.floor((config?.footprint.height ?? 1) / 2);
+
+      for (let dy = -range; dy <= range; dy++) {
+        for (let dx = -range; dx <= range; dx++) {
+          const px = cx + dx;
+          const py = cy + dy;
+          const key = `${px},${py}`;
+
+          if (processed.has(key)) continue;
+          if (px < 0 || px >= GRID_WIDTH || py < 0 || py >= GRID_HEIGHT) continue;
+
+          const plot = this.getPlot(px, py);
+          if (!plot || !plot.unlocked) continue;
+
+          processed.add(key);
+          plots.push({ x: px, y: py });
+        }
+      }
+    }
+
+    return plots;
+  }
+
+  getProtectionReduce(x: number, y: number, kind: 'storm' | 'frost' | 'drought' | 'heatwave'): number {
+    let reduce = 0;
+
+    if (kind === 'storm' || kind === 'frost' || kind === 'drought' || kind === 'heatwave') {
+      for (const building of this.buildings.values()) {
+        const config = getBuildingConfig(building.type);
+        if (!config) continue;
+
+        const rangeKey = (
+          building.type === 'lightning_rod' ? 'lightningRodRange' :
+          building.type === 'heater' ? 'heaterRange' :
+          building.type === 'drainage' ? 'drainageRange' : null
+        );
+        const reduceKey = (
+          building.type === 'lightning_rod' ? 'lightningRodReduce' :
+          building.type === 'heater' ? 'heaterReduce' :
+          building.type === 'drainage' ? 'drainageReduce' : null
+        );
+        if (!rangeKey || !reduceKey) continue;
+
+        const range = config.effect[rangeKey] ?? 1;
+        const cx = building.x + Math.floor(config.footprint.width / 2);
+        const cy = building.y + Math.floor(config.footprint.height / 2);
+
+        if (Math.abs(x - cx) <= range && Math.abs(y - cy) <= range) {
+          const contribution = config.effect[reduceKey] ?? 0;
+          if (building.type === 'heater' && kind === 'frost') {
+            reduce = Math.max(reduce, contribution);
+          } else if (building.type === 'lightning_rod' && kind === 'storm') {
+            reduce = Math.max(reduce, contribution);
+          } else if (building.type === 'drainage' && kind === 'storm') {
+            reduce = Math.min(1, reduce + contribution);
+          }
+        }
+      }
+    }
+
+    return Math.min(1, reduce);
+  }
+
+  isPlotProtected(x: number, y: number, kind: 'storm' | 'frost'): { protected: boolean; source: 'greenhouse' | 'lightning_rod' | 'heater' | 'drainage' | null } {
+    if (this.isGreenhousePlot(x, y) && (kind === 'storm' || kind === 'frost')) {
+      return { protected: true, source: 'greenhouse' };
+    }
+
+    for (const building of this.buildings.values()) {
+      const config = getBuildingConfig(building.type);
+      if (!config) continue;
+
+      if (kind === 'storm' && (building.type === 'lightning_rod' || building.type === 'drainage')) {
+        const range = config.effect[(
+          building.type === 'lightning_rod' ? 'lightningRodRange' : 'drainageRange'
+        )] ?? 1;
+        const cx = building.x + Math.floor(config.footprint.width / 2);
+        const cy = building.y + Math.floor(config.footprint.height / 2);
+        if (Math.abs(x - cx) <= range && Math.abs(y - cy) <= range) {
+          return { protected: true, source: building.type };
+        }
+      }
+
+      if (kind === 'frost' && building.type === 'heater') {
+        const range = config.effect.heaterRange ?? 1;
+        const cx = building.x + Math.floor(config.footprint.width / 2);
+        const cy = building.y + Math.floor(config.footprint.height / 2);
+        if (Math.abs(x - cx) <= range && Math.abs(y - cy) <= range) {
+          return { protected: true, source: 'heater' };
+        }
+      }
+    }
+
+    return { protected: false, source: null };
+  }
+
   updatePlotReference(plots: Plot[][]): void {
     this.plots = plots;
     for (const building of this.buildings.values()) {

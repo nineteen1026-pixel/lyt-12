@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed, toRaw } from 'vue';
-import type { GameState, Plot, Animal, InventoryItem, ToolType, Season, WeatherType, WeatherState, Order, Building, BuildingType, BuildingConfig, GameStats, AchievementProgress, CodexEntry, QualityGrade, SkillTreeState, SkillEffectBonus, SkillNode, LevelUpResult } from '../types/game';
-import { QUALITY_PRICE_MULTIPLIER, QUALITY_NAMES } from '../types/game';
+import type { GameState, Plot, Animal, InventoryItem, ToolType, Season, WeatherType, WeatherState, WeatherSeverity, WeatherWarning, Order, Building, BuildingType, BuildingConfig, GameStats, AchievementProgress, CodexEntry, QualityGrade, SkillTreeState, SkillEffectBonus, SkillNode, LevelUpResult } from '../types/game';
+import { QUALITY_PRICE_MULTIPLIER, QUALITY_NAMES, DAY_DURATION } from '../types/game';
 import { MapGrid } from '../modules/MapGrid';
 import { CropGrowth } from '../modules/CropGrowth';
 import { Livestock } from '../modules/Livestock';
@@ -68,7 +68,9 @@ export const useGameStore = defineStore('game', () => {
   const unlockedPlots = computed(() => mapGrid.value?.getUnlockedCount() ?? 0);
   const animalCount = computed(() => livestock.value?.getAnimalCount() ?? { chickens: 0, cows: 0 });
   const currentWeather = computed(() => weather.value?.getCurrent() ?? 'sunny');
+  const currentWeatherSeverity = computed<WeatherSeverity>(() => weather.value?.getCurrentSeverity() ?? 'normal');
   const weatherForecast = computed(() => weather.value?.getForecast() ?? []);
+  const weatherForecastSeverities = computed<WeatherSeverity[]>(() => weather.value?.getForecastSeverities() ?? []);
   const weatherName = computed(() => weather.value?.getWeatherName(currentWeather.value) ?? '晴天');
   const reputation = computed(() => orders.value?.getReputation() ?? { score: 0, level: 1, completedOrders: 0, failedOrders: 0, rareSeedDropBoost: 0 });
   const reputationLevelInfo = computed(() => getReputationLevel(reputation.value.score));
@@ -106,6 +108,7 @@ export const useGameStore = defineStore('game', () => {
   const currentShareCardDataUrl = ref<string | null>(null);
   const showMiningModal = ref(false);
   const currentMineSession = ref<MineSession | null>(null);
+  const activeWeatherWarning = ref<WeatherWarning | null>(null);
 
   let notificationId = 0;
 
@@ -142,6 +145,13 @@ export const useGameStore = defineStore('game', () => {
       livestock.value = new Livestock(savedGame.animals);
       inventory.value = new Inventory(savedGame.inventory, buildings.value);
       weather.value = new Weather(savedGame.state.weather, savedGame.state.season, buildings.value);
+      if (weather.value.getForecast().length === 0) {
+        const forecast = weather.value.generateForecast(3);
+        gameState.value.weather.forecast = forecast;
+        gameState.value.weather.forecastSeverities = weather.value.getForecastSeverities();
+      } else if (gameState.value.weather.forecastSeverities.length === 0) {
+        gameState.value.weather.forecastSeverities = weather.value.getForecastSeverities();
+      }
       shop.value = new Shop(
         inventory.value,
         mapGrid.value,
@@ -205,20 +215,27 @@ export const useGameStore = defineStore('game', () => {
           weather.value.setSeason(mapGrid.value.getSeason());
           const newForecast = weather.value.generateForecast(3);
           weather.value.getState().forecast = newForecast;
+          weather.value.getState().forecastSeverities = weather.value.getForecastSeverities();
         }
 
         orders.value.setCurrentSeason(mapGrid.value.getSeason());
         orders.value.setCurrentDay(mapGrid.value.getDay());
 
-        const weatherHistory = weather.value.processOfflineWeather(offlineMs, now);
-        if (weatherHistory.length > 0) {
+        const weatherHistoryResult = processOfflineWeatherWithHistory(offlineMs, now);
+        if (weatherHistoryResult.history.length > 0) {
           const weatherEffects = weather.value.applyWeatherHistory(
             mapGrid.value.getPlotGrid(),
-            weatherHistory,
+            weatherHistoryResult.history,
+            weatherHistoryResult.severities,
             savedGame.state.lastSaveTime,
             now
           );
           notifyWeatherEffects(weatherEffects, true);
+          for (let i = 0; i < weatherHistoryResult.history.length; i++) {
+            const w = weatherHistoryResult.history[i];
+            const sev = weatherHistoryResult.severities[i] ?? 'normal';
+            recordDisasterStats(w, sev, weatherEffects);
+          }
         }
 
         const cropUpdates = cropGrowth.value.processOfflineGrowth(offlineMs, now);
@@ -231,8 +248,8 @@ export const useGameStore = defineStore('game', () => {
 
         let offlineMsg = '离线期间：';
         let hasContent = false;
-        if (weatherHistory.length > 0) {
-          offlineMsg += `经过${weatherHistory.length}天，`;
+        if (weatherHistoryResult.history.length > 0) {
+          offlineMsg += `经过${weatherHistoryResult.history.length}天，`;
           hasContent = true;
         }
         if (cropUpdates.some(u => u.becameReady)) {
@@ -298,6 +315,7 @@ export const useGameStore = defineStore('game', () => {
       if (weather.value.getForecast().length === 0) {
         const forecast = weather.value.generateForecast(3);
         gameState.value.weather.forecast = forecast;
+        gameState.value.weather.forecastSeverities = weather.value.getForecastSeverities();
       }
       shop.value = new Shop(
         inventory.value,
@@ -359,6 +377,31 @@ export const useGameStore = defineStore('game', () => {
     }
 
     isInitialized.value = true;
+  }
+
+  function processOfflineWeatherWithHistory(offlineMs: number, currentTime: number): { history: WeatherType[]; severities: WeatherSeverity[] } {
+    if (!weather.value || !mapGrid.value) return { history: [], severities: [] };
+    const elapsed = Math.max(0, offlineMs);
+    const dayCount = Math.floor(elapsed / DAY_DURATION);
+    const history: WeatherType[] = [];
+    const severities: WeatherSeverity[] = [];
+
+    const wState = weather.value.getState();
+    for (let i = 0; i < dayCount; i++) {
+      if (wState.forecast.length > 0) {
+        history.push(wState.forecast.shift()!);
+        severities.push(wState.forecastSeverities.shift() ?? 'normal');
+      }
+    }
+
+    weather.value.processOfflineWeather(offlineMs, currentTime, mapGrid.value.getDay());
+
+    while (wState.forecast.length < 3) {
+      wState.forecast.push(weather.value.getForecast()[wState.forecast.length]);
+      wState.forecastSeverities.push(weather.value.getForecastSeverities()[wState.forecastSeverities.length]);
+    }
+
+    return { history, severities };
   }
 
   function handleAchievementUnlocked(result: AchievementUnlockResult) {
@@ -530,8 +573,23 @@ export const useGameStore = defineStore('game', () => {
     if (effects.destroyedCrops > 0) {
       parts.push(`${effects.destroyedCrops}株作物被雷暴摧毁`);
     }
+    if (effects.witheredCrops > 0) {
+      parts.push(`${effects.witheredCrops}株作物因干旱枯萎`);
+    }
+    if (effects.scorchedCrops > 0) {
+      parts.push(`${effects.scorchedCrops}株作物被热浪灼伤`);
+    }
     if (effects.greenhouseProtected > 0) {
       parts.push(`温室保护了${effects.greenhouseProtected}株作物`);
+    }
+    if (effects.lightningRodProtected > 0) {
+      parts.push(`防雷针保护了${effects.lightningRodProtected}株作物`);
+    }
+    if (effects.heaterProtected > 0) {
+      parts.push(`加热器保护了${effects.heaterProtected}株作物`);
+    }
+    if (effects.drainageProtected > 0) {
+      parts.push(`排水沟保护了${effects.drainageProtected}株作物`);
     }
     if (parts.length > 0) {
       const prefix = isOffline ? '离线期间' : '天气变化';
@@ -908,6 +966,7 @@ export const useGameStore = defineStore('game', () => {
       orders.value.setCurrentSeason(seasonUpdate.newSeason!);
       const newForecast = weather.value.generateForecast(3);
       weather.value.getState().forecast = newForecast;
+      weather.value.getState().forecastSeverities = weather.value.getForecastSeverities();
       
       if (statistics.value && seasonUpdate.newSeason) {
         statistics.value.recordSeasonChanged(seasonUpdate.newSeason);
@@ -928,15 +987,28 @@ export const useGameStore = defineStore('game', () => {
       checkAchievements();
     }
 
-    const weatherUpdate = weather.value.advanceDay(time);
+    const currentDay = mapGrid.value.getDay();
+    const weatherUpdate = weather.value.advanceDay(time, currentDay);
     if (weatherUpdate.changed && weatherUpdate.newWeather) {
-      addNotification(`今日天气：${weather.value.getWeatherName(weatherUpdate.newWeather)}！`, 'info');
+      const sevLabel = weather.value.getSeverityName(weatherUpdate.newSeverity ?? 'normal');
+      addNotification(`今日天气：${sevLabel}${weather.value.getWeatherName(weatherUpdate.newWeather)}！`, 'info');
       const effects = weather.value.applyWeatherEffects(mapGrid.value.getPlotGrid(), time);
       notifyWeatherEffects(effects, false);
-      
+      recordDisasterStats(weatherUpdate.newWeather, weatherUpdate.newSeverity ?? 'normal', effects);
+
       if (statistics.value && weatherUpdate.newWeather === 'stormy') {
         statistics.value.recordStormOccurred();
       }
+
+      activeWeatherWarning.value = null;
+    }
+
+    if (weatherUpdate.warning) {
+      activeWeatherWarning.value = weatherUpdate.warning;
+      if (statistics.value) {
+        statistics.value.recordWeatherWarningReceived();
+      }
+      addNotification(weatherUpdate.warning.message, 'error');
     }
 
     const expiredOrders = orders.value.checkAndProcessExpiredOrders();
@@ -969,6 +1041,48 @@ export const useGameStore = defineStore('game', () => {
 
     cropGrowth.value.updateAllCrops(time);
     livestock.value.updateAllProduction(time);
+  }
+
+  function recordDisasterStats(weather: WeatherType, severity: WeatherSeverity, effects: WeatherEffects) {
+    if (!statistics.value) return;
+    const isSevere = severity === 'severe';
+    const isDangerous = ['stormy', 'snowy', 'drought', 'heatwave'].includes(weather);
+
+    if (isDangerous) {
+      statistics.value.recordDisasterOccurred(weather, isSevere);
+    }
+
+    if (effects.greenhouseProtected > 0) {
+      statistics.value.recordCropsSavedByBuilding('greenhouse', effects.greenhouseProtected);
+    }
+    if (effects.lightningRodProtected > 0) {
+      statistics.value.recordCropsSavedByBuilding('lightning_rod', effects.lightningRodProtected);
+    }
+    if (effects.heaterProtected > 0) {
+      statistics.value.recordCropsSavedByBuilding('heater', effects.heaterProtected);
+    }
+    if (effects.drainageProtected > 0) {
+      statistics.value.recordCropsSavedByBuilding('drainage', effects.drainageProtected);
+    }
+    if (effects.sprinklerWatered > 0) {
+      statistics.value.recordCropsSavedByBuilding('sprinkler', effects.sprinklerWatered);
+    }
+
+    const lost = effects.frozenCrops + effects.destroyedCrops + effects.witheredCrops + effects.scorchedCrops;
+    if (lost > 0) {
+      statistics.value.recordCropsLostToDisaster(weather, lost);
+    }
+
+    if (isSevere && isDangerous && lost === 0) {
+      statistics.value.recordPerfectDisasterDefense();
+    }
+  }
+
+  function dismissWeatherWarning() {
+    if (activeWeatherWarning.value && statistics.value) {
+      statistics.value.recordWeatherWarningActed();
+    }
+    activeWeatherWarning.value = null;
   }
 
   function submitOrder(orderId: string) {
@@ -1593,7 +1707,9 @@ export const useGameStore = defineStore('game', () => {
     unlockedPlots,
     animalCount,
     currentWeather,
+    currentWeatherSeverity,
     weatherForecast,
+    weatherForecastSeverities,
     weatherName,
     reputation,
     reputationLevelInfo,
@@ -1685,6 +1801,8 @@ export const useGameStore = defineStore('game', () => {
     setLevelUpModalRef,
     setExpFloatTextRef,
     showExpFloatAtScreen,
-    setNextExpPosition
+    setNextExpPosition,
+    activeWeatherWarning,
+    dismissWeatherWarning
   };
 });

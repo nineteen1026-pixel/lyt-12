@@ -51,6 +51,12 @@ const getBuildingEffectText = (type: BuildingType): string => {
       return '范围内的地块突破季节限制，全年可种植任意作物，并保护作物免受恶劣天气影响';
     case 'barn':
       return `库存容量 +${config.effect.barnCapacityBonus}，并防止农产品腐坏`;
+    case 'lightning_rod':
+      return `吸引雷电，保护周围 ${config.effect.lightningRodRange} 格内作物，雷暴摧毁概率降低 ${Math.round((config.effect.lightningRodReduce ?? 0) * 100)}%`;
+    case 'heater':
+      return `为周围 ${config.effect.heaterRange} 格内作物供暖，防止雪天冻结与冰霜伤害`;
+    case 'drainage':
+      return `排出雨水，减弱周围 ${config.effect.drainageRange} 格内作物的雷暴破坏`;
     default:
       return '';
   }

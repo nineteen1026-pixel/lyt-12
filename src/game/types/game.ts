@@ -6,9 +6,11 @@ export type Season = 'spring' | 'summer' | 'autumn' | 'winter';
 
 export type ToolType = 'hoe' | 'water' | 'hand' | null;
 
-export type WeatherType = 'sunny' | 'rainy' | 'snowy' | 'stormy';
+export type WeatherType = 'sunny' | 'rainy' | 'snowy' | 'stormy' | 'drought' | 'heatwave';
 
-export type BuildingType = 'sprinkler' | 'greenhouse' | 'barn';
+export type WeatherSeverity = 'light' | 'normal' | 'severe';
+
+export type BuildingType = 'sprinkler' | 'greenhouse' | 'barn' | 'lightning_rod' | 'heater' | 'drainage';
 
 export interface BuildingConfig {
   id: BuildingType;
@@ -23,7 +25,21 @@ export interface BuildingConfig {
     greenhouseSeasons?: Season[];
     barnCapacityBonus?: number;
     barnPreventSpoilage?: boolean;
+    lightningRodRange?: number;
+    lightningRodReduce?: number;
+    heaterRange?: number;
+    heaterReduce?: number;
+    drainageRange?: number;
+    drainageReduce?: number;
   };
+}
+
+export interface WeatherWarning {
+  weather: WeatherType;
+  severity: WeatherSeverity;
+  message: string;
+  issuedAt: number;
+  targetDay: number;
 }
 
 export interface Building {
@@ -54,7 +70,9 @@ export interface Plot {
 
 export interface WeatherState {
   current: WeatherType;
+  currentSeverity: WeatherSeverity;
   forecast: WeatherType[];
+  forecastSeverities: WeatherSeverity[];
   lastWeatherChange: number;
   lastDayWeather: number;
 }
@@ -163,7 +181,7 @@ export interface InventoryItem {
 
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 
-export type AchievementCategory = 'farming' | 'animal' | 'building' | 'order' | 'economy' | 'exploration' | 'seasonal';
+export type AchievementCategory = 'farming' | 'animal' | 'building' | 'order' | 'economy' | 'exploration' | 'seasonal' | 'disaster';
 
 export type CodexCategory = 'crop' | 'animal' | 'item' | 'building' | 'villager' | 'fish' | 'artifact' | 'mineral';
 
@@ -260,6 +278,26 @@ export interface GameStats {
   mineHighestFloorReached: number;
   totalOresMined: Record<string, number>;
   mineExplorations: number;
+  weatherWarningsReceived: number;
+  weatherWarningsActed: number;
+  disastersByType: Record<WeatherType, number>;
+  severeDisastersSurvived: number;
+  droughtsSurvived: number;
+  heatwavesSurvived: number;
+  severeStormsSurvived: number;
+  severeFrostsSurvived: number;
+  cropsSavedByGreenhouse: number;
+  cropsSavedBySprinkler: number;
+  cropsSavedByLightningRod: number;
+  cropsSavedByHeater: number;
+  cropsSavedByDrainage: number;
+  totalCropsSavedByBuildings: number;
+  perfectDisasterDefense: number;
+  cropsLostToStorms: number;
+  cropsLostToFrost: number;
+  cropsLostToDrought: number;
+  cropsLostToHeatwave: number;
+  totalCropsLostToDisasters: number;
 }
 
 export interface AchievementState {

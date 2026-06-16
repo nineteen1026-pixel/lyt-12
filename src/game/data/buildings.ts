@@ -39,6 +39,45 @@ export const BUILDINGS: Record<BuildingType, BuildingConfig> = {
       barnCapacityBonus: 100,
       barnPreventSpoilage: true
     }
+  },
+  lightning_rod: {
+    id: 'lightning_rod',
+    name: '防雷针',
+    description: '吸引雷电并保护周围2格内的作物免受雷暴摧毁',
+    icon: '⚡',
+    price: 280,
+    footprint: { width: 1, height: 1 },
+    unlockPlotCount: 14,
+    effect: {
+      lightningRodRange: 2,
+      lightningRodReduce: 0.7
+    }
+  },
+  heater: {
+    id: 'heater',
+    name: '加热器',
+    description: '为周围1格内的作物供暖，防止雪天冻结与冰霜伤害',
+    icon: '🔥',
+    price: 260,
+    footprint: { width: 1, height: 1 },
+    unlockPlotCount: 14,
+    effect: {
+      heaterRange: 1,
+      heaterReduce: 1
+    }
+  },
+  drainage: {
+    id: 'drainage',
+    name: '排水沟',
+    description: '快速排出雨水，减弱雷暴对周围2格内作物的破坏',
+    icon: '🌊',
+    price: 220,
+    footprint: { width: 1, height: 1 },
+    unlockPlotCount: 14,
+    effect: {
+      drainageRange: 2,
+      drainageReduce: 0.5
+    }
   }
 };
 

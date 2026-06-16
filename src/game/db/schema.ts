@@ -2,7 +2,7 @@ import type { GameState, Plot, Animal, InventoryItem, Order, ReputationState, Bu
 
 export const DB_CONFIG = {
   name: 'PixelFarmDB',
-  version: 6
+  version: 7
 };
 
 export interface DBStores {
@@ -81,7 +81,9 @@ export const INITIAL_GAME_STATE: GameState = {
   lastSeasonAdvance: Date.now(),
   weather: {
     current: 'sunny',
+    currentSeverity: 'normal',
     forecast: [],
+    forecastSeverities: [],
     lastWeatherChange: Date.now(),
     lastDayWeather: Date.now()
   },

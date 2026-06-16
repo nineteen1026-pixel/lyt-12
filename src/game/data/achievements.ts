@@ -7,7 +7,8 @@ export const ACHIEVEMENT_CATEGORY_NAMES: Record<AchievementCategory, string> = {
   order: '订单',
   economy: '经济',
   exploration: '探索',
-  seasonal: '季节'
+  seasonal: '季节',
+  disaster: '防灾'
 };
 
 export const ACHIEVEMENTS: Achievement[] = [
@@ -521,5 +522,230 @@ ACHIEVEMENTS.push(
     conditions: [{ type: 'totalMineralsMined', target: 500 }],
     conditionLogic: 'all',
     reward: { coins: 1500, reputation: 60, title: '矿业大亨' }
+  },
+  {
+    id: 'early_warning',
+    name: '预警先知',
+    description: '累计收到5次灾害预警',
+    icon: '📡',
+    category: 'disaster',
+    rarity: 'common',
+    conditions: [{ type: 'weatherWarningsReceived', target: 5 }],
+    conditionLogic: 'all',
+    reward: { coins: 100, reputation: 8 }
+  },
+  {
+    id: 'master_meteorologist',
+    name: '气象大师',
+    description: '累计收到30次灾害预警',
+    icon: '🛰️',
+    category: 'disaster',
+    rarity: 'rare',
+    conditions: [{ type: 'weatherWarningsReceived', target: 30 }],
+    conditionLogic: 'all',
+    reward: { coins: 400, reputation: 25, title: '气象大师' }
+  },
+  {
+    id: 'preemptive_defender',
+    name: '未雨绸缪',
+    description: '累计响应10次灾害预警（在预警日采取行动）',
+    icon: '🛡️',
+    category: 'disaster',
+    rarity: 'rare',
+    conditions: [{ type: 'weatherWarningsActed', target: 10 }],
+    conditionLogic: 'all',
+    reward: { coins: 350, reputation: 22 }
+  },
+  {
+    id: 'lightning_specialist',
+    name: '防雷专家',
+    description: '建造第一座防雷针',
+    icon: '⚡',
+    category: 'disaster',
+    rarity: 'uncommon',
+    conditions: [{ type: 'buildingsBuilt', itemId: 'lightning_rod', target: 1 }],
+    conditionLogic: 'all',
+    reward: { coins: 200, reputation: 15 }
+  },
+  {
+    id: 'warm_home',
+    name: '温暖之家',
+    description: '建造第一座加热器',
+    icon: '🔥',
+    category: 'disaster',
+    rarity: 'uncommon',
+    conditions: [{ type: 'buildingsBuilt', itemId: 'heater', target: 1 }],
+    conditionLogic: 'all',
+    reward: { coins: 200, reputation: 15 }
+  },
+  {
+    id: 'water_engineer',
+    name: '水利工程师',
+    description: '建造第一座排水沟',
+    icon: '🌊',
+    category: 'disaster',
+    rarity: 'uncommon',
+    conditions: [{ type: 'buildingsBuilt', itemId: 'drainage', target: 1 }],
+    conditionLogic: 'all',
+    reward: { coins: 200, reputation: 15 }
+  },
+  {
+    id: 'fully_armed',
+    name: '全副武装',
+    description: '建造全部3种防灾建筑',
+    icon: '🏰',
+    category: 'disaster',
+    rarity: 'epic',
+    conditions: [
+      { type: 'buildingsBuilt', itemId: 'lightning_rod', target: 1 },
+      { type: 'buildingsBuilt', itemId: 'heater', target: 1 },
+      { type: 'buildingsBuilt', itemId: 'drainage', target: 1 }
+    ],
+    conditionLogic: 'all',
+    reward: { coins: 800, reputation: 50, title: '全副武装' }
+  },
+  {
+    id: 'first_storm_survived',
+    name: '初历雷暴',
+    description: '经历第一次剧烈雷暴',
+    icon: '⛈️',
+    category: 'disaster',
+    rarity: 'common',
+    conditions: [{ type: 'severeStormsSurvived', target: 1 }],
+    conditionLogic: 'all',
+    reward: { coins: 150, reputation: 10 }
+  },
+  {
+    id: 'storm_master',
+    name: '风暴大师',
+    description: '累计经历10次剧烈雷暴',
+    icon: '🌪️',
+    category: 'disaster',
+    rarity: 'epic',
+    conditions: [{ type: 'severeStormsSurvived', target: 10 }],
+    conditionLogic: 'all',
+    reward: { coins: 700, reputation: 40, title: '风暴大师' }
+  },
+  {
+    id: 'frost_resistant',
+    name: '抗寒英雄',
+    description: '累计经历5次剧烈寒潮',
+    icon: '🥶',
+    category: 'disaster',
+    rarity: 'rare',
+    conditions: [{ type: 'severeFrostsSurvived', target: 5 }],
+    conditionLogic: 'all',
+    reward: { coins: 400, reputation: 25 }
+  },
+  {
+    id: 'drought_buster',
+    name: '干旱克星',
+    description: '累计经历10次干旱天气',
+    icon: '🌵',
+    category: 'disaster',
+    rarity: 'rare',
+    conditions: [{ type: 'droughtsSurvived', target: 10 }],
+    conditionLogic: 'all',
+    reward: { coins: 450, reputation: 30 }
+  },
+  {
+    id: 'heatwave_survivor',
+    name: '热浪幸存者',
+    description: '累计经历10次热浪天气',
+    icon: '🌡️',
+    category: 'disaster',
+    rarity: 'rare',
+    conditions: [{ type: 'heatwavesSurvived', target: 10 }],
+    conditionLogic: 'all',
+    reward: { coins: 450, reputation: 30 }
+  },
+  {
+    id: 'disaster_master',
+    name: '防灾大师',
+    description: '累计经历25次剧烈极端天气',
+    icon: '🌋',
+    category: 'disaster',
+    rarity: 'legendary',
+    conditions: [{ type: 'severeDisastersSurvived', target: 25 }],
+    conditionLogic: 'all',
+    reward: { coins: 2000, reputation: 100, title: '防灾大师' }
+  },
+  {
+    id: 'greenhouse_guardian',
+    name: '温室守护神',
+    description: '通过温室累计保护100株作物',
+    icon: '🏡',
+    category: 'disaster',
+    rarity: 'epic',
+    conditions: [{ type: 'cropsSavedByGreenhouse', target: 100 }],
+    conditionLogic: 'all',
+    reward: { coins: 800, reputation: 45, title: '温室守护神' }
+  },
+  {
+    id: 'lightning_rod_hero',
+    name: '引雷英雄',
+    description: '通过防雷针累计保护50株作物',
+    icon: '⚡',
+    category: 'disaster',
+    rarity: 'rare',
+    conditions: [{ type: 'cropsSavedByLightningRod', target: 50 }],
+    conditionLogic: 'all',
+    reward: { coins: 500, reputation: 30 }
+  },
+  {
+    id: 'warm_guardian',
+    name: '温暖守护者',
+    description: '通过加热器累计保护50株作物',
+    icon: '🔥',
+    category: 'disaster',
+    rarity: 'rare',
+    conditions: [{ type: 'cropsSavedByHeater', target: 50 }],
+    conditionLogic: 'all',
+    reward: { coins: 500, reputation: 30 }
+  },
+  {
+    id: 'drainage_champion',
+    name: '排水卫士',
+    description: '通过排水沟累计保护50株作物',
+    icon: '🌊',
+    category: 'disaster',
+    rarity: 'rare',
+    conditions: [{ type: 'cropsSavedByDrainage', target: 50 }],
+    conditionLogic: 'all',
+    reward: { coins: 500, reputation: 30 }
+  },
+  {
+    id: 'crop_savior',
+    name: '作物救星',
+    description: '累计通过建筑保护200株作物',
+    icon: '🌟',
+    category: 'disaster',
+    rarity: 'epic',
+    conditions: [{ type: 'totalCropsSavedByBuildings', target: 200 }],
+    conditionLogic: 'all',
+    reward: { coins: 1000, reputation: 60, title: '作物救星' }
+  },
+  {
+    id: 'zero_loss',
+    name: '零损失',
+    description: '在剧烈灾害中保护所有作物（无损度过）',
+    icon: '🛡️',
+    category: 'disaster',
+    rarity: 'legendary',
+    conditions: [{ type: 'perfectDisasterDefense', target: 1 }],
+    conditionLogic: 'all',
+    reward: { coins: 1500, reputation: 80, title: '无损专家' }
+  },
+  {
+    id: 'unscathed_x5',
+    name: '毫发无损',
+    description: '累计5次在剧烈灾害中实现零损失',
+    icon: '👼',
+    category: 'disaster',
+    rarity: 'legendary',
+    secret: true,
+    conditions: [{ type: 'perfectDisasterDefense', target: 5 }],
+    conditionLogic: 'all',
+    reward: { coins: 5000, reputation: 200, title: '不屈守护者' }
   }
 );
