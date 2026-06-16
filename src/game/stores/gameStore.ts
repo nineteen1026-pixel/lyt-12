@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed, toRaw } from 'vue';
-import type { GameState, Plot, Animal, InventoryItem, ToolType, Season, WeatherType, WeatherState, Order, Building, BuildingType, BuildingConfig, GameStats, AchievementProgress, CodexEntry, QualityGrade } from '../types/game';
+import type { GameState, Plot, Animal, InventoryItem, ToolType, Season, WeatherType, WeatherState, Order, Building, BuildingType, BuildingConfig, GameStats, AchievementProgress, CodexEntry, QualityGrade, SkillTreeState, SkillEffectBonus, SkillNode } from '../types/game';
 import { QUALITY_PRICE_MULTIPLIER, QUALITY_NAMES } from '../types/game';
 import { MapGrid } from '../modules/MapGrid';
 import { CropGrowth } from '../modules/CropGrowth';
@@ -12,6 +12,7 @@ import type { WeatherEffects } from '../modules/Weather';
 import { Orders } from '../modules/Orders';
 import { Buildings } from '../modules/Buildings';
 import { Statistics } from '../modules/Statistics';
+import { SkillTree } from '../modules/SkillTree';
 import { AchievementSystem, type AchievementUnlockResult } from '../modules/Achievements';
 import { CodexSystem, type DiscoveryResult } from '../modules/Codex';
 import { shareCardGenerator } from '../modules/ShareCard';
@@ -39,6 +40,7 @@ export const useGameStore = defineStore('game', () => {
   const orders = ref<Orders | null>(null);
   const buildings = ref<Buildings | null>(null);
   const statistics = ref<Statistics | null>(null);
+  const skillTree = ref<SkillTree | null>(null);
   const achievementSystem = ref<AchievementSystem | null>(null);
   const codexSystem = ref<CodexSystem | null>(null);
   const selectedTool = ref<ToolType>(null);
@@ -71,6 +73,15 @@ export const useGameStore = defineStore('game', () => {
   const barnCapacityBonus = computed(() => buildings.value?.getBarnCapacityBonus() ?? 0);
 
   const stats = computed<GameStats | null>(() => statistics.value?.getStats() ?? null);
+  const skillTreeState = computed<SkillTreeState | null>(() => skillTree.value?.getState() ?? null);
+  const skillTreeLevel = computed(() => skillTree.value?.getLevel() ?? 1);
+  const skillTreeExperience = computed(() => skillTree.value?.getExperience() ?? 0);
+  const skillTreeTotalExperience = computed(() => skillTree.value?.getTotalExperience() ?? 0);
+  const skillPoints = computed(() => skillTree.value?.getSkillPoints() ?? 0);
+  const skillExperienceProgress = computed(() => skillTree.value?.getExperienceProgress() ?? 0);
+  const skillEffectBonus = computed<SkillEffectBonus | null>(() => skillTree.value?.getEffectBonus() ?? null);
+  const skillNodesUnlocked = computed(() => skillTree.value?.getTotalNodesUnlocked() ?? 0);
+  const skillTotalLevels = computed(() => skillTree.value?.getTotalSkillLevels() ?? 0);
   const achievementProgress = computed(() => achievementSystem.value?.getAllProgress() ?? {});
   const unlockedAchievementCount = computed(() => achievementSystem.value?.getUnlockedCount() ?? 0);
   const totalAchievementCount = computed(() => achievementSystem.value?.getTotalCount() ?? 0);
@@ -81,6 +92,7 @@ export const useGameStore = defineStore('game', () => {
   
   const showAchievements = ref(false);
   const showCodex = ref(false);
+  const showSkillTree = ref(false);
   const showShareCard = ref(false);
   const currentShareCardDataUrl = ref<string | null>(null);
   const showMiningModal = ref(false);
@@ -138,7 +150,8 @@ export const useGameStore = defineStore('game', () => {
         savedGame.state.day
       );
 
-      statistics.value = new Statistics(savedGame.stats);
+      skillTree.value = new SkillTree(savedGame.skillTree);
+      statistics.value = new Statistics(savedGame.stats, skillTree.value);
       achievementSystem.value = new AchievementSystem(
         savedGame.achievements?.reduce((acc, a) => {
           acc[a.achievementId] = a;
@@ -152,6 +165,14 @@ export const useGameStore = defineStore('game', () => {
         }, {} as Record<string, CodexEntry>)
       );
 
+      if (cropGrowth.value) {
+        cropGrowth.value.setSkillAccess(skillTree.value);
+      }
+      if (livestock.value) {
+        livestock.value.setSkillAccess(skillTree.value);
+      }
+
+      skillTree.value.subscribe(handleSkillTreeChanged);
       achievementSystem.value.subscribe(handleAchievementUnlocked);
       codexSystem.value.subscribe(handleCodexDiscovered);
 
@@ -285,7 +306,8 @@ export const useGameStore = defineStore('game', () => {
         newGame.state.day
       );
 
-      statistics.value = new Statistics(newGame.stats);
+      skillTree.value = new SkillTree(newGame.skillTree);
+      statistics.value = new Statistics(newGame.stats, skillTree.value);
       achievementSystem.value = new AchievementSystem(
         newGame.achievements?.reduce((acc, a) => {
           acc[a.achievementId] = a;
@@ -299,6 +321,14 @@ export const useGameStore = defineStore('game', () => {
         }, {} as Record<string, CodexEntry>)
       );
 
+      if (cropGrowth.value) {
+        cropGrowth.value.setSkillAccess(skillTree.value);
+      }
+      if (livestock.value) {
+        livestock.value.setSkillAccess(skillTree.value);
+      }
+
+      skillTree.value.subscribe(handleSkillTreeChanged);
       achievementSystem.value.subscribe(handleAchievementUnlocked);
       codexSystem.value.subscribe(handleCodexDiscovered);
 
@@ -344,6 +374,9 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
+  function handleSkillTreeChanged(state: SkillTreeState, bonus: SkillEffectBonus) {
+  }
+
   function checkAchievements() {
     if (!achievementSystem.value || !statistics.value || !codexSystem.value) return;
     
@@ -382,7 +415,7 @@ export const useGameStore = defineStore('game', () => {
   }
 
   async function saveGame() {
-    if (!gameState.value || !mapGrid.value || !livestock.value || !inventory.value || !shop.value || !weather.value || !orders.value || !buildings.value || !statistics.value || !achievementSystem.value || !codexSystem.value) {
+    if (!gameState.value || !mapGrid.value || !livestock.value || !inventory.value || !shop.value || !weather.value || !orders.value || !buildings.value || !statistics.value || !skillTree.value || !achievementSystem.value || !codexSystem.value) {
       return;
     }
 
@@ -400,6 +433,7 @@ export const useGameStore = defineStore('game', () => {
     const rawOrders = JSON.parse(JSON.stringify(toRaw(orders.value.getOrders())));
     const rawBuildings = JSON.parse(JSON.stringify(toRaw(buildings.value.getBuildings())));
     const rawStats = JSON.parse(JSON.stringify(toRaw(statistics.value.getStats())));
+    const rawSkillTree = JSON.parse(JSON.stringify(toRaw(skillTree.value.getState())));
     const rawAchievements = JSON.parse(JSON.stringify(toRaw(Object.values(achievementSystem.value.getAllProgress()))));
     const rawCodex = JSON.parse(JSON.stringify(toRaw(codexSystem.value.getAllEntries())));
 
@@ -412,7 +446,8 @@ export const useGameStore = defineStore('game', () => {
       rawBuildings,
       rawStats,
       rawAchievements,
-      rawCodex
+      rawCodex,
+      rawSkillTree
     );
   }
 
@@ -983,6 +1018,41 @@ export const useGameStore = defineStore('game', () => {
     showCodex.value = false;
   }
 
+  function openSkillTreeModal() {
+    showSkillTree.value = true;
+  }
+
+  function closeSkillTreeModal() {
+    showSkillTree.value = false;
+  }
+
+  function unlockSkillNode(nodeId: string): { success: boolean; message: string; node?: SkillNode } {
+    if (!skillTree.value) {
+      return { success: false, message: '技能树系统未初始化' };
+    }
+
+    const result = skillTree.value.unlockNode(nodeId);
+    if (result.success) {
+      addNotification(result.message, 'success');
+      checkAchievements();
+      saveGame();
+    } else {
+      addNotification(result.message, 'error');
+    }
+    return result;
+  }
+
+  function canUnlockSkillNode(nodeId: string): { canUnlock: boolean; reason: string } {
+    if (!skillTree.value) {
+      return { canUnlock: false, reason: '技能树系统未初始化' };
+    }
+    return skillTree.value.canUnlockNode(nodeId);
+  }
+
+  function getSkillNodeLevel(nodeId: string): number {
+    return skillTree.value?.getNodeLevel(nodeId) ?? 0;
+  }
+
   const lastFishTime = ref(0);
   const lastDigTime = ref(0);
 
@@ -1411,6 +1481,17 @@ export const useGameStore = defineStore('game', () => {
     hasBarn,
     barnCapacityBonus,
     stats,
+    skillTree,
+    skillTreeState,
+    skillTreeLevel,
+    skillTreeExperience,
+    skillTreeTotalExperience,
+    skillPoints,
+    skillExperienceProgress,
+    skillEffectBonus,
+    skillNodesUnlocked,
+    skillTotalLevels,
+    showSkillTree,
     achievementProgress,
     unlockedAchievementCount,
     totalAchievementCount,
@@ -1448,6 +1529,11 @@ export const useGameStore = defineStore('game', () => {
     closeAchievementsModal,
     openCodexModal,
     closeCodexModal,
+    openSkillTreeModal,
+    closeSkillTreeModal,
+    unlockSkillNode,
+    canUnlockSkillNode,
+    getSkillNodeLevel,
     checkAchievements,
     tryFish,
     tryDig,

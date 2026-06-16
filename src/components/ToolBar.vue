@@ -201,6 +201,20 @@ const toggleBuildingsPanel = () => {
     </div>
 
     <div 
+      class="tool-btn flex flex-col items-center justify-center w-16 h-16 bg-farm-ui-dark border-3 border-farm-wood-dark cursor-pointer transition-all hover:bg-farm-gold hover:scale-105 active:scale-95 relative"
+      @click="gameStore.openSkillTreeModal()"
+    >
+      <span class="text-2xl">🌳</span>
+      <span class="font-pixel text-[8px] text-farm-wood-dark mt-1">技能</span>
+      <span 
+        v-if="gameStore.skillPoints > 0"
+        class="absolute -top-1 -right-1 w-5 h-5 bg-yellow-500 text-white font-pixel text-[10px] rounded-full flex items-center justify-center border-2 border-farm-wood-dark"
+      >
+        {{ gameStore.skillPoints }}
+      </span>
+    </div>
+
+    <div 
       v-if="showSeedSelector && availableSeeds.length > 0"
       class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-farm-ui border-4 border-farm-wood-dark p-3 shadow-pixel flex gap-2"
     >

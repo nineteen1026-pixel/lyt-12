@@ -1,8 +1,8 @@
-import type { GameState, Plot, Animal, InventoryItem, Order, ReputationState, Building, GameStats, AchievementProgress, CodexEntry } from '../types/game';
+import type { GameState, Plot, Animal, InventoryItem, Order, ReputationState, Building, GameStats, AchievementProgress, CodexEntry, SkillTreeState } from '../types/game';
 
 export const DB_CONFIG = {
   name: 'PixelFarmDB',
-  version: 5
+  version: 6
 };
 
 export interface DBStores {
@@ -15,6 +15,7 @@ export interface DBStores {
   stats: GameStats;
   achievements: AchievementProgress;
   codex: CodexEntry;
+  skillTree: SkillTreeState;
 }
 
 export const STORE_CONFIGS = [
@@ -55,6 +56,10 @@ export const STORE_CONFIGS = [
   },
   {
     name: 'codex',
+    keyPath: 'id'
+  },
+  {
+    name: 'skillTree',
     keyPath: 'id'
   }
 ];

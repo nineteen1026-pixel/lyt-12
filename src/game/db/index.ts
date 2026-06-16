@@ -1,8 +1,9 @@
 import { openDB, IDBPDatabase } from 'idb';
 import { DB_CONFIG, STORE_CONFIGS, INITIAL_GAME_STATE, INITIAL_REPUTATION, type DBStores } from './schema';
-import type { GameState, Plot, Animal, InventoryItem, Order, Building, GameStats, AchievementProgress, CodexEntry } from '../types/game';
+import type { GameState, Plot, Animal, InventoryItem, Order, Building, GameStats, AchievementProgress, CodexEntry, SkillTreeState } from '../types/game';
 import { GRID_WIDTH, GRID_HEIGHT, INITIAL_UNLOCKED } from '../types/game';
 import { INITIAL_STATS } from '../modules/Statistics';
+import { INITIAL_SKILL_TREE_STATE } from '../modules/SkillTree';
 import { ACHIEVEMENTS } from '../data/achievements';
 import { CODEX_ENTRIES } from '../data/codex';
 
@@ -239,6 +240,21 @@ class GameDatabase {
     }
   }
 
+  async saveSkillTree(skillTree: SkillTreeState): Promise<void> {
+    const db = this.ensureDB();
+    const clone = JSON.parse(JSON.stringify(skillTree));
+    await db.put('skillTree', clone);
+  }
+
+  async getSkillTree(): Promise<SkillTreeState | undefined> {
+    const db = this.ensureDB();
+    try {
+      return await db.get('skillTree', 'main');
+    } catch (e) {
+      return undefined;
+    }
+  }
+
   async initializeNewGame(): Promise<{
     state: GameState;
     plots: Plot[];
@@ -249,6 +265,7 @@ class GameDatabase {
     stats: GameStats;
     achievements: AchievementProgress[];
     codex: CodexEntry[];
+    skillTree: SkillTreeState;
   }> {
     const now = Date.now();
     const state: GameState = {
@@ -308,6 +325,7 @@ class GameDatabase {
     }));
 
     const codex: CodexEntry[] = CODEX_ENTRIES.map(e => ({ ...e }));
+    const skillTree: SkillTreeState = { ...INITIAL_SKILL_TREE_STATE };
 
     await this.saveGameState(state);
     await this.saveAllPlots(plots);
@@ -318,8 +336,9 @@ class GameDatabase {
     await this.saveStats(stats);
     await this.saveAllAchievements(achievements);
     await this.saveAllCodexEntries(codex);
+    await this.saveSkillTree(skillTree);
 
-    return { state, plots, animals, inventory, orders, buildings, stats, achievements, codex };
+    return { state, plots, animals, inventory, orders, buildings, stats, achievements, codex, skillTree };
   }
 
   async loadGame(): Promise<{
@@ -332,6 +351,7 @@ class GameDatabase {
     stats?: GameStats;
     achievements?: AchievementProgress[];
     codex?: CodexEntry[];
+    skillTree?: SkillTreeState;
   } | null> {
     const state = await this.getGameState();
     if (!state) {
@@ -370,8 +390,9 @@ class GameDatabase {
     const stats = await this.getStats();
     const achievements = await this.getAllAchievements();
     const codex = await this.getAllCodexEntries();
+    const skillTree = await this.getSkillTree();
 
-    return { state, plots, animals, inventory, orders, buildings, stats, achievements, codex };
+    return { state, plots, animals, inventory, orders, buildings, stats, achievements, codex, skillTree };
   }
 
   async saveCompleteGame(
@@ -383,7 +404,8 @@ class GameDatabase {
     buildings: Building[],
     stats?: GameStats,
     achievements?: AchievementProgress[],
-    codex?: CodexEntry[]
+    codex?: CodexEntry[],
+    skillTree?: SkillTreeState
   ): Promise<void> {
     await this.saveGameState(state);
     await this.saveAllPlots(plots);
@@ -400,6 +422,9 @@ class GameDatabase {
     }
     if (codex) {
       await this.saveAllCodexEntries(codex);
+    }
+    if (skillTree) {
+      await this.saveSkillTree(skillTree);
     }
   }
 

@@ -1,15 +1,25 @@
-import type { Animal, QualityGrade } from '../types/game';
+import type { Animal, QualityGrade, SkillEffectBonus } from '../types/game';
 import { getAnimalConfig } from '../data/animals';
 import { rollQuality } from './Quality';
 
+export interface LivestockSkillAccess {
+  getSkillBonus(): SkillEffectBonus;
+}
+
 export class Livestock {
   private animals: Animal[];
+  private skillAccess: LivestockSkillAccess | null = null;
 
-  constructor(animals: Animal[]) {
+  constructor(animals: Animal[], skillAccess: LivestockSkillAccess | null = null) {
     this.animals = animals.map(a => ({
       ...a,
       feedCount: a.feedCount ?? 0
     }));
+    this.skillAccess = skillAccess;
+  }
+
+  setSkillAccess(skillAccess: LivestockSkillAccess): void {
+    this.skillAccess = skillAccess;
   }
 
   getAnimals(): Animal[] {
@@ -68,11 +78,19 @@ export class Livestock {
       return null;
     }
 
-    const quality = rollQuality(animal.feedCount || 0, false);
+    const skillBonus = this.skillAccess?.getSkillBonus();
+    const quality = rollQuality(animal.feedCount || 0, false, skillBonus, true);
+
+    let quantity = config.productAmount;
+    if (skillBonus?.animalYield) {
+      if (Math.random() < skillBonus.animalYield) {
+        quantity += 1;
+      }
+    }
 
     const result = {
       itemId: config.productId,
-      quantity: config.productAmount,
+      quantity,
       quality
     };
 
@@ -89,8 +107,12 @@ export class Livestock {
       return false;
     }
 
+    const skillBonus = this.skillAccess?.getSkillBonus();
+    const speedBonus = skillBonus?.animalProductionSpeed || 0;
+    const adjustedProduceTime = config.produceTime / (1 + speedBonus);
+
     const elapsed = currentTime - animal.lastProduceTime;
-    if (elapsed >= config.produceTime) {
+    if (elapsed >= adjustedProduceTime) {
       animal.hasProduct = true;
       return true;
     }
@@ -112,6 +134,8 @@ export class Livestock {
 
   processOfflineProduction(offlineMs: number, currentTime: number): Animal[] {
     const newlyProduced: Animal[] = [];
+    const skillBonus = this.skillAccess?.getSkillBonus();
+    const speedBonus = skillBonus?.animalProductionSpeed || 0;
 
     for (const animal of this.animals) {
       if (animal.hasProduct) {
@@ -123,8 +147,9 @@ export class Livestock {
         continue;
       }
 
+      const adjustedProduceTime = config.produceTime / (1 + speedBonus);
       const elapsed = currentTime - animal.lastProduceTime;
-      const produceCount = Math.floor(elapsed / config.produceTime);
+      const produceCount = Math.floor(elapsed / adjustedProduceTime);
 
       if (produceCount > 0) {
         animal.hasProduct = true;
@@ -150,8 +175,12 @@ export class Livestock {
       return 0;
     }
 
+    const skillBonus = this.skillAccess?.getSkillBonus();
+    const speedBonus = skillBonus?.animalProductionSpeed || 0;
+    const adjustedProduceTime = config.produceTime / (1 + speedBonus);
+
     const elapsed = currentTime - animal.lastProduceTime;
-    return Math.min(1, elapsed / config.produceTime);
+    return Math.min(1, elapsed / adjustedProduceTime);
   }
 
   getAnimalsByType(type: 'chicken' | 'cow'): Animal[] {

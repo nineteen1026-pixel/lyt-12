@@ -1,4 +1,4 @@
-import type { Plot, Crop, Season, QualityGrade } from '../types/game';
+import type { Plot, Crop, Season, QualityGrade, SkillEffectBonus } from '../types/game';
 import { getCropConfig } from '../data/crops';
 import { rollQuality } from './Quality';
 
@@ -6,17 +6,27 @@ export interface CropGrowthBuildingsAccess {
   getGreenhouseAllowedSeasons(x: number, y: number): Season[] | null;
 }
 
+export interface CropGrowthSkillAccess {
+  getSkillBonus(): SkillEffectBonus;
+}
+
 export class CropGrowth {
   private plots: Plot[][];
   private buildings: CropGrowthBuildingsAccess | null = null;
+  private skillAccess: CropGrowthSkillAccess | null = null;
 
-  constructor(plotGrid: Plot[][], buildings: CropGrowthBuildingsAccess | null = null) {
+  constructor(plotGrid: Plot[][], buildings: CropGrowthBuildingsAccess | null = null, skillAccess: CropGrowthSkillAccess | null = null) {
     this.plots = plotGrid;
     this.buildings = buildings;
+    this.skillAccess = skillAccess;
   }
 
   setBuildings(buildings: CropGrowthBuildingsAccess): void {
     this.buildings = buildings;
+  }
+
+  setSkillAccess(skillAccess: CropGrowthSkillAccess): void {
+    this.skillAccess = skillAccess;
   }
 
   plantSeed(x: number, y: number, cropType: string, season: Season): boolean {
@@ -88,12 +98,20 @@ export class CropGrowth {
       return null;
     }
 
+    const skillBonus = this.skillAccess?.getSkillBonus();
     const isGreenhouse = this.buildings?.getGreenhouseAllowedSeasons(x, y) !== null;
-    const quality = rollQuality(plot.crop.waterCount || 0, isGreenhouse);
+    const quality = rollQuality(plot.crop.waterCount || 0, isGreenhouse, skillBonus);
+
+    let quantity = 1;
+    if (skillBonus?.cropYield) {
+      if (Math.random() < skillBonus.cropYield) {
+        quantity = 2;
+      }
+    }
 
     const result = {
       itemId: config.productId,
-      quantity: 1,
+      quantity,
       quality
     };
 
@@ -109,16 +127,19 @@ export class CropGrowth {
       return 0;
     }
 
+    const skillBonus = this.skillAccess?.getSkillBonus();
+    const speedBonus = skillBonus?.cropGrowthSpeed || 0;
+
     if (crop.frozen) {
       const elapsed = crop.lastGrowthCheck - crop.plantedAt;
       const growthMultiplier = crop.watered ? 1 : 0.5;
-      const effectiveGrowth = elapsed * growthMultiplier;
+      const effectiveGrowth = elapsed * growthMultiplier * (1 + speedBonus);
       return Math.min(1, effectiveGrowth / config.growthTime);
     }
 
     const elapsed = currentTime - crop.plantedAt;
     const growthMultiplier = crop.watered ? 1 : 0.5;
-    const effectiveGrowth = elapsed * growthMultiplier;
+    const effectiveGrowth = elapsed * growthMultiplier * (1 + speedBonus);
 
     return Math.min(1, effectiveGrowth / config.growthTime);
   }

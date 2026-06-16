@@ -10,6 +10,7 @@ import OrdersModal from './components/OrdersModal.vue';
 import BuildingsModal from './components/BuildingsModal.vue';
 import AchievementsModal from './components/AchievementsModal.vue';
 import CodexModal from './components/CodexModal.vue';
+import SkillTreeModal from './components/SkillTreeModal.vue';
 import MiningModal from './components/MiningModal.vue';
 
 const gameStore = useGameStore();
@@ -45,6 +46,7 @@ onMounted(async () => {
       <BuildingsModal />
       <AchievementsModal />
       <CodexModal />
+      <SkillTreeModal />
       <MiningModal />
       
       <div class="fixed top-4 right-4 flex flex-col gap-2 z-40">
@@ -69,6 +71,7 @@ onMounted(async () => {
         <p class="mt-1">🏗️ 建造：点击"建造"按钮选择建筑 → 点击地块放置 → 建造后自动生效</p>
         <p class="mt-1">📦 建造谷仓扩展容量，建造洒水器自动浇水，建造温室突破季节限制！</p>
         <p class="mt-1">🏆 成就：完成各种挑战解锁成就奖励 | 📖 图鉴：收集图鉴条目发现更多内容</p>
+        <p class="mt-1">🌳 技能：种植养殖获得经验升级，分配天赋点提升产量、速度与品质！</p>
       </div>
     </template>
   </div>

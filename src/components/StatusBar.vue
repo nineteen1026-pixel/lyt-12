@@ -85,6 +85,27 @@ const seasonInfo = computed(() => {
           </span>
         </div>
       </div>
+
+      <div class="flex items-center gap-2 pl-4 border-l-2 border-farm-wood-dark/30">
+        <span class="text-xl">🌳</span>
+        <div class="flex flex-col">
+          <span class="font-pixel text-[10px] text-farm-wood-dark leading-tight">
+            技能 Lv.{{ gameStore.skillTreeLevel }}
+          </span>
+          <div class="w-20 h-1.5 bg-farm-wood-dark/30 overflow-hidden">
+            <div 
+              class="h-full bg-gradient-to-r from-green-400 to-emerald-500 transition-all duration-300"
+              :style="{ width: `${gameStore.skillExperienceProgress * 100}%` }"
+            ></div>
+          </div>
+        </div>
+        <div 
+          v-if="gameStore.skillPoints > 0"
+          class="ml-1 px-2 py-0.5 bg-yellow-400 border-2 border-yellow-600 rounded"
+        >
+          <span class="font-pixel text-[8px] text-yellow-900">+{{ gameStore.skillPoints }}点</span>
+        </div>
+      </div>
     </div>
   </div>
 </template>

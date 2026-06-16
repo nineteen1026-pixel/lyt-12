@@ -1,17 +1,50 @@
-import type { QualityGrade } from '../types/game';
+import type { QualityGrade, SkillEffectBonus } from '../types/game';
 import { QUALITY_WEIGHTS, QUALITY_PRICE_MULTIPLIER } from '../types/game';
 
-export function rollQuality(waterCount: number = 0, isGreenhouse: boolean = false): QualityGrade {
+export function rollQuality(
+  waterCount: number = 0,
+  isGreenhouse: boolean = false,
+  skillBonus?: SkillEffectBonus | null,
+  isAnimal: boolean = false
+): QualityGrade {
   const weights: Record<QualityGrade, number> = { ...QUALITY_WEIGHTS };
 
-  const waterBonus = Math.min(waterCount, 5) * 3;
-  weights[4] += waterBonus;
-  weights[5] += waterBonus;
+  const waterFeedCount = Math.min(waterCount, 5);
+  let waterFeedBonus = waterFeedCount * 3;
+
+  if (skillBonus) {
+    if (isAnimal && skillBonus.feedBonus) {
+      waterFeedBonus *= (1 + skillBonus.feedBonus);
+    } else if (!isAnimal && skillBonus.waterBonus) {
+      waterFeedBonus *= (1 + skillBonus.waterBonus);
+    }
+  }
+
+  weights[4] += waterFeedBonus;
+  weights[5] += waterFeedBonus;
 
   if (isGreenhouse) {
-    weights[3] += 5;
-    weights[4] += 5;
-    weights[5] += 3;
+    let greenhouseBoost = 1;
+    if (skillBonus?.greenhouseBoost) {
+      greenhouseBoost += skillBonus.greenhouseBoost;
+    }
+    weights[3] += 5 * greenhouseBoost;
+    weights[4] += 5 * greenhouseBoost;
+    weights[5] += 3 * greenhouseBoost;
+  }
+
+  if (skillBonus) {
+    const qualityBonus = isAnimal ? skillBonus.animalQuality : skillBonus.cropQuality;
+    if (qualityBonus > 0) {
+      weights[3] += qualityBonus * 10;
+      weights[4] += qualityBonus * 10;
+      weights[5] += qualityBonus * 10;
+    }
+
+    if (skillBonus.rareChance > 0) {
+      weights[4] += skillBonus.rareChance * 15;
+      weights[5] += skillBonus.rareChance * 10;
+    }
   }
 
   const totalWeight = (weights[1] + weights[2] + weights[3] + weights[4] + weights[5]);

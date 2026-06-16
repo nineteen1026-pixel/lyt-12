@@ -403,3 +403,88 @@ export interface MineExploreResult {
   reachedFloor: number;
   newDiscoveries: string[];
 }
+
+export type SkillBranch = 'farming' | 'livestock' | 'quality';
+
+export type SkillEffectType = 
+  | 'crop_growth_speed'
+  | 'crop_yield'
+  | 'crop_quality'
+  | 'animal_production_speed'
+  | 'animal_yield'
+  | 'animal_quality'
+  | 'water_bonus'
+  | 'feed_bonus'
+  | 'greenhouse_boost'
+  | 'rare_chance';
+
+export interface SkillEffect {
+  type: SkillEffectType;
+  value: number;
+  perLevel: boolean;
+}
+
+export interface SkillNode {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  branch: SkillBranch;
+  maxLevel: number;
+  currentLevel: number;
+  effects: SkillEffect[];
+  requires: string[];
+  unlockAtLevel: number;
+}
+
+export interface SkillBranchConfig {
+  id: SkillBranch;
+  name: string;
+  description: string;
+  icon: string;
+  color: string;
+}
+
+export interface SkillTreeState {
+  id: string;
+  level: number;
+  experience: number;
+  totalExperience: number;
+  skillPoints: number;
+  unlockedNodes: Record<string, number>;
+}
+
+export interface SkillEffectBonus {
+  cropGrowthSpeed: number;
+  cropYield: number;
+  cropQuality: number;
+  animalProductionSpeed: number;
+  animalYield: number;
+  animalQuality: number;
+  waterBonus: number;
+  feedBonus: number;
+  greenhouseBoost: number;
+  rareChance: number;
+}
+
+export interface LevelUpResult {
+  newLevel: number;
+  skillPointsGained: number;
+  unlockedSkills: string[];
+}
+
+export const EXPERIENCE_PER_LEVEL = 100;
+export const EXPERIENCE_GROWTH_MULTIPLIER = 1.5;
+export const SKILL_POINTS_PER_LEVEL = 1;
+
+export const EXPERIENCE_REWARDS: Record<string, number> = {
+  crop_harvested: 10,
+  seed_planted: 2,
+  product_collected: 15,
+  animal_bought: 20,
+  quality_harvest_1: 1,
+  quality_harvest_2: 2,
+  quality_harvest_3: 4,
+  quality_harvest_4: 8,
+  quality_harvest_5: 16,
+};

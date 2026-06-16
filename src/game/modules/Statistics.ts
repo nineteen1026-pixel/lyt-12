@@ -1,4 +1,9 @@
 import type { GameStats, Season, OrderTier, QualityGrade } from '../types/game';
+import { EXPERIENCE_REWARDS } from '../types/game';
+
+export interface SkillExperienceAccess {
+  addExperience(amount: number, reason: string): { amount: number; reason: string };
+}
 
 export const INITIAL_STATS: GameStats = {
   totalCropsHarvested: 0,
@@ -93,8 +98,9 @@ export interface StatEvent {
 export class Statistics {
   private stats: GameStats;
   private listeners: Array<(stats: GameStats, event: StatEvent) => void> = [];
+  private skillExperienceAccess: SkillExperienceAccess | null = null;
 
-  constructor(initialStats?: Partial<GameStats>) {
+  constructor(initialStats?: Partial<GameStats>, skillExperienceAccess?: SkillExperienceAccess) {
     this.stats = {
       ...INITIAL_STATS,
       ...initialStats,
@@ -112,6 +118,21 @@ export class Statistics {
       mineralsMined: { ...INITIAL_STATS.mineralsMined, ...initialStats?.mineralsMined },
       totalOresMined: { ...INITIAL_STATS.totalOresMined, ...initialStats?.totalOresMined }
     };
+    this.skillExperienceAccess = skillExperienceAccess || null;
+  }
+
+  setSkillExperienceAccess(access: SkillExperienceAccess): void {
+    this.skillExperienceAccess = access;
+  }
+
+  private addSkillExperience(eventType: string, quantity: number = 1): void {
+    if (!this.skillExperienceAccess) return;
+    
+    const expPerUnit = EXPERIENCE_REWARDS[eventType] || 0;
+    if (expPerUnit > 0) {
+      const totalExp = expPerUnit * quantity;
+      this.skillExperienceAccess.addExperience(totalExp, eventType);
+    }
   }
 
   getStats(): GameStats {
@@ -145,12 +166,14 @@ export class Statistics {
   recordCropHarvested(cropId: string, quantity: number = 1) {
     this.stats.totalCropsHarvested += quantity;
     this.stats.cropsHarvested[cropId] = (this.stats.cropsHarvested[cropId] || 0) + quantity;
+    this.addSkillExperience('crop_harvested', quantity);
     this.notify(this.createEvent('crop_harvested', { cropId, quantity }));
   }
 
   recordSeedPlanted(cropId: string, quantity: number = 1) {
     this.stats.totalSeedsPlanted += quantity;
     this.stats.seedsPlanted[cropId] = (this.stats.seedsPlanted[cropId] || 0) + quantity;
+    this.addSkillExperience('seed_planted', quantity);
     this.notify(this.createEvent('seed_planted', { cropId, quantity }));
   }
 
@@ -158,12 +181,14 @@ export class Statistics {
     this.stats.totalProductsCollected += quantity;
     this.stats.productsCollected[productId] = (this.stats.productsCollected[productId] || 0) + quantity;
     this.recordItemDiscovered(productId, quantity);
+    this.addSkillExperience('product_collected', quantity);
     this.notify(this.createEvent('product_collected', { productId, quantity }));
   }
 
   recordAnimalBought(animalType: string, quantity: number = 1) {
     this.stats.totalAnimalsOwned += quantity;
     this.stats.animalsOwned[animalType] = (this.stats.animalsOwned[animalType] || 0) + quantity;
+    this.addSkillExperience('animal_bought', quantity);
     this.notify(this.createEvent('animal_bought', { animalType, quantity }));
   }
 
@@ -292,6 +317,7 @@ export class Statistics {
     if (quality > this.stats.highestQualityHarvested) {
       this.stats.highestQualityHarvested = quality;
     }
+    this.addSkillExperience(`quality_harvest_${quality}`, 1);
     this.notify(this.createEvent('quality_harvest', { quality }));
   }
 
