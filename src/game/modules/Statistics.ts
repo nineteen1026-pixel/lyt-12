@@ -1,8 +1,9 @@
 import type { GameStats, Season, OrderTier, QualityGrade } from '../types/game';
 import { EXPERIENCE_REWARDS } from '../types/game';
+import type { SkillExperienceGain } from './SkillTree';
 
 export interface SkillExperienceAccess {
-  addExperience(amount: number, reason: string): { amount: number; reason: string };
+  addExperience(amount: number, reason: string): SkillExperienceGain;
 }
 
 export const INITIAL_STATS: GameStats = {
@@ -125,14 +126,15 @@ export class Statistics {
     this.skillExperienceAccess = access;
   }
 
-  private addSkillExperience(eventType: string, quantity: number = 1): void {
-    if (!this.skillExperienceAccess) return;
+  private addSkillExperience(eventType: string, quantity: number = 1): SkillExperienceGain | null {
+    if (!this.skillExperienceAccess) return null;
     
     const expPerUnit = EXPERIENCE_REWARDS[eventType] || 0;
     if (expPerUnit > 0) {
       const totalExp = expPerUnit * quantity;
-      this.skillExperienceAccess.addExperience(totalExp, eventType);
+      return this.skillExperienceAccess.addExperience(totalExp, eventType);
     }
+    return null;
   }
 
   getStats(): GameStats {
@@ -163,33 +165,37 @@ export class Statistics {
     };
   }
 
-  recordCropHarvested(cropId: string, quantity: number = 1) {
+  recordCropHarvested(cropId: string, quantity: number = 1): SkillExperienceGain | null {
     this.stats.totalCropsHarvested += quantity;
     this.stats.cropsHarvested[cropId] = (this.stats.cropsHarvested[cropId] || 0) + quantity;
-    this.addSkillExperience('crop_harvested', quantity);
-    this.notify(this.createEvent('crop_harvested', { cropId, quantity }));
+    const expGain = this.addSkillExperience('crop_harvested', quantity);
+    this.notify(this.createEvent('crop_harvested', { cropId, quantity, expGain }));
+    return expGain;
   }
 
-  recordSeedPlanted(cropId: string, quantity: number = 1) {
+  recordSeedPlanted(cropId: string, quantity: number = 1): SkillExperienceGain | null {
     this.stats.totalSeedsPlanted += quantity;
     this.stats.seedsPlanted[cropId] = (this.stats.seedsPlanted[cropId] || 0) + quantity;
-    this.addSkillExperience('seed_planted', quantity);
-    this.notify(this.createEvent('seed_planted', { cropId, quantity }));
+    const expGain = this.addSkillExperience('seed_planted', quantity);
+    this.notify(this.createEvent('seed_planted', { cropId, quantity, expGain }));
+    return expGain;
   }
 
-  recordProductCollected(productId: string, quantity: number = 1) {
+  recordProductCollected(productId: string, quantity: number = 1): SkillExperienceGain | null {
     this.stats.totalProductsCollected += quantity;
     this.stats.productsCollected[productId] = (this.stats.productsCollected[productId] || 0) + quantity;
     this.recordItemDiscovered(productId, quantity);
-    this.addSkillExperience('product_collected', quantity);
-    this.notify(this.createEvent('product_collected', { productId, quantity }));
+    const expGain = this.addSkillExperience('product_collected', quantity);
+    this.notify(this.createEvent('product_collected', { productId, quantity, expGain }));
+    return expGain;
   }
 
-  recordAnimalBought(animalType: string, quantity: number = 1) {
+  recordAnimalBought(animalType: string, quantity: number = 1): SkillExperienceGain | null {
     this.stats.totalAnimalsOwned += quantity;
     this.stats.animalsOwned[animalType] = (this.stats.animalsOwned[animalType] || 0) + quantity;
-    this.addSkillExperience('animal_bought', quantity);
-    this.notify(this.createEvent('animal_bought', { animalType, quantity }));
+    const expGain = this.addSkillExperience('animal_bought', quantity);
+    this.notify(this.createEvent('animal_bought', { animalType, quantity, expGain }));
+    return expGain;
   }
 
   recordAnimalSold(animalType: string, quantity: number = 1) {
@@ -312,13 +318,14 @@ export class Statistics {
     return typeof value === 'number' ? value : 0;
   }
 
-  recordQualityHarvest(quality: QualityGrade) {
+  recordQualityHarvest(quality: QualityGrade): SkillExperienceGain | null {
     this.stats.cropsByQuality[quality] = (this.stats.cropsByQuality[quality] || 0) + 1;
     if (quality > this.stats.highestQualityHarvested) {
       this.stats.highestQualityHarvested = quality;
     }
-    this.addSkillExperience(`quality_harvest_${quality}`, 1);
-    this.notify(this.createEvent('quality_harvest', { quality }));
+    const expGain = this.addSkillExperience(`quality_harvest_${quality}`, 1);
+    this.notify(this.createEvent('quality_harvest', { quality, expGain }));
+    return expGain;
   }
 
   recordQualityBonusCoins(amount: number) {

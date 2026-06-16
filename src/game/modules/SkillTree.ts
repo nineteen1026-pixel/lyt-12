@@ -5,7 +5,19 @@ import { SKILL_NODES, getSkillNode } from '../data/skillTree';
 export interface SkillExperienceGain {
   amount: number;
   reason: string;
+  levelUps: LevelUpResult[];
+  totalPointsGained: number;
 }
+
+export type SkillEventType = 'experience_gained' | 'level_up' | 'skill_point_gained' | 'skill_unlocked';
+
+export interface SkillEvent {
+  type: SkillEventType;
+  data: any;
+  timestamp: number;
+}
+
+export type SkillEventListener = (event: SkillEvent) => void;
 
 export const INITIAL_SKILL_TREE_STATE: SkillTreeState = {
   id: 'main',
@@ -19,6 +31,7 @@ export const INITIAL_SKILL_TREE_STATE: SkillTreeState = {
 export class SkillTree {
   private state: SkillTreeState;
   private listeners: Array<(state: SkillTreeState, bonus: SkillEffectBonus) => void> = [];
+  private eventListeners: Array<SkillEventListener> = [];
 
   constructor(initialState?: Partial<SkillTreeState>) {
     this.state = {
@@ -75,16 +88,41 @@ export class SkillTree {
 
   addExperience(amount: number, reason: string = ''): SkillExperienceGain {
     const actualGain = Math.max(0, amount);
+    const previousLevel = this.state.level;
+    const previousPoints = this.state.skillPoints;
+    
     this.state.experience += actualGain;
     this.state.totalExperience += actualGain;
 
     const levelUpResults = this.checkLevelUp();
+    
+    const totalPointsGained = this.state.skillPoints - previousPoints;
+
+    if (actualGain > 0) {
+      this.emitEvent('experience_gained', {
+        amount: actualGain,
+        reason,
+        previousLevel,
+        newLevel: this.state.level
+      });
+    }
+
+    for (const levelUp of levelUpResults) {
+      this.emitEvent('level_up', levelUp);
+      this.emitEvent('skill_point_gained', {
+        level: levelUp.newLevel,
+        pointsGained: levelUp.skillPointsGained,
+        totalPoints: this.state.skillPoints
+      });
+    }
 
     this.notify();
 
     return {
       amount: actualGain,
-      reason
+      reason,
+      levelUps: levelUpResults,
+      totalPointsGained
     };
   }
 
@@ -152,13 +190,21 @@ export class SkillTree {
     }
 
     this.state.skillPoints -= 1;
-    this.state.unlockedNodes[nodeId] = (this.state.unlockedNodes[nodeId] || 0) + 1;
+    const newLevel = (this.state.unlockedNodes[nodeId] || 0) + 1;
+    this.state.unlockedNodes[nodeId] = newLevel;
+
+    this.emitEvent('skill_unlocked', {
+      nodeId,
+      node,
+      newLevel,
+      isMaxLevel: newLevel >= node.maxLevel
+    });
 
     this.notify();
 
     return {
       success: true,
-      message: `成功解锁 ${node.name} Lv.${this.state.unlockedNodes[nodeId]}！`,
+      message: `成功解锁 ${node.name} Lv.${newLevel}！`,
       node
     };
   }
@@ -262,6 +308,27 @@ export class SkillTree {
         this.listeners.splice(index, 1);
       }
     };
+  }
+
+  onEvent(callback: SkillEventListener): () => void {
+    this.eventListeners.push(callback);
+    return () => {
+      const index = this.eventListeners.indexOf(callback);
+      if (index > -1) {
+        this.eventListeners.splice(index, 1);
+      }
+    };
+  }
+
+  private emitEvent(type: SkillEventType, data: any): void {
+    const event: SkillEvent = {
+      type,
+      data,
+      timestamp: Date.now()
+    };
+    for (const listener of this.eventListeners) {
+      listener(event);
+    }
   }
 
   private notify(): void {

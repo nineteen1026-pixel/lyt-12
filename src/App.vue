@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, nextTick } from 'vue';
 import { useGameStore } from './game/stores/gameStore';
 import GameCanvas from './components/GameCanvas.vue';
 import StatusBar from './components/StatusBar.vue';
@@ -11,14 +11,27 @@ import BuildingsModal from './components/BuildingsModal.vue';
 import AchievementsModal from './components/AchievementsModal.vue';
 import CodexModal from './components/CodexModal.vue';
 import SkillTreeModal from './components/SkillTreeModal.vue';
+import LevelUpModal from './components/LevelUpModal.vue';
+import ExpFloatText from './components/ExpFloatText.vue';
 import MiningModal from './components/MiningModal.vue';
 
 const gameStore = useGameStore();
 const isLoading = ref(true);
 
+const levelUpModalRef = ref<InstanceType<typeof LevelUpModal> | null>(null);
+const expFloatTextRef = ref<InstanceType<typeof ExpFloatText> | null>(null);
+
 onMounted(async () => {
   await gameStore.initGame();
   isLoading.value = false;
+  
+  await nextTick();
+  if (levelUpModalRef.value) {
+    gameStore.setLevelUpModalRef(levelUpModalRef.value);
+  }
+  if (expFloatTextRef.value) {
+    gameStore.setExpFloatTextRef(expFloatTextRef.value);
+  }
 });
 </script>
 
@@ -47,6 +60,8 @@ onMounted(async () => {
       <AchievementsModal />
       <CodexModal />
       <SkillTreeModal />
+      <LevelUpModal ref="levelUpModalRef" />
+      <ExpFloatText ref="expFloatTextRef" />
       <MiningModal />
       
       <div class="fixed top-4 right-4 flex flex-col gap-2 z-40">

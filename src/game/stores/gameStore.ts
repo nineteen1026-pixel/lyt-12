@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed, toRaw } from 'vue';
-import type { GameState, Plot, Animal, InventoryItem, ToolType, Season, WeatherType, WeatherState, Order, Building, BuildingType, BuildingConfig, GameStats, AchievementProgress, CodexEntry, QualityGrade, SkillTreeState, SkillEffectBonus, SkillNode } from '../types/game';
+import type { GameState, Plot, Animal, InventoryItem, ToolType, Season, WeatherType, WeatherState, Order, Building, BuildingType, BuildingConfig, GameStats, AchievementProgress, CodexEntry, QualityGrade, SkillTreeState, SkillEffectBonus, SkillNode, LevelUpResult } from '../types/game';
 import { QUALITY_PRICE_MULTIPLIER, QUALITY_NAMES } from '../types/game';
 import { MapGrid } from '../modules/MapGrid';
 import { CropGrowth } from '../modules/CropGrowth';
@@ -12,7 +12,7 @@ import type { WeatherEffects } from '../modules/Weather';
 import { Orders } from '../modules/Orders';
 import { Buildings } from '../modules/Buildings';
 import { Statistics } from '../modules/Statistics';
-import { SkillTree } from '../modules/SkillTree';
+import { SkillTree, type SkillEvent, type SkillExperienceGain } from '../modules/SkillTree';
 import { AchievementSystem, type AchievementUnlockResult } from '../modules/Achievements';
 import { CodexSystem, type DiscoveryResult } from '../modules/Codex';
 import { shareCardGenerator } from '../modules/ShareCard';
@@ -52,6 +52,9 @@ export const useGameStore = defineStore('game', () => {
   const showBuildings = ref(false);
   const isInitialized = ref(false);
   const notifications = ref<Array<{ id: number; message: string; type: 'success' | 'error' | 'info' }>>([]);
+  
+  const levelUpModalRef = ref<{ showLevelUp: (levelUp: LevelUpResult) => void } | null>(null);
+  const expFloatTextRef = ref<{ showFloatExp: (amount: number, reason?: string, x?: number, y?: number, type?: 'exp' | 'levelup' | 'skillpoint') => void } | null>(null);
 
   const coins = computed(() => gameState.value?.coins ?? 0);
   const season = computed(() => mapGrid.value?.getSeason() ?? 'spring');
@@ -173,6 +176,7 @@ export const useGameStore = defineStore('game', () => {
       }
 
       skillTree.value.subscribe(handleSkillTreeChanged);
+      skillTree.value.onEvent(handleSkillEvent);
       achievementSystem.value.subscribe(handleAchievementUnlocked);
       codexSystem.value.subscribe(handleCodexDiscovered);
 
@@ -329,6 +333,7 @@ export const useGameStore = defineStore('game', () => {
       }
 
       skillTree.value.subscribe(handleSkillTreeChanged);
+      skillTree.value.onEvent(handleSkillEvent);
       achievementSystem.value.subscribe(handleAchievementUnlocked);
       codexSystem.value.subscribe(handleCodexDiscovered);
 
@@ -375,6 +380,61 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function handleSkillTreeChanged(state: SkillTreeState, bonus: SkillEffectBonus) {
+  }
+
+  function handleSkillEvent(event: SkillEvent) {
+    switch (event.type) {
+      case 'experience_gained':
+        if (expFloatTextRef.value && event.data.amount > 0) {
+          expFloatTextRef.value.showFloatExp(
+            event.data.amount,
+            event.data.reason,
+            undefined,
+            undefined,
+            'exp'
+          );
+        }
+        break;
+      case 'level_up':
+        if (levelUpModalRef.value) {
+          levelUpModalRef.value.showLevelUp(event.data);
+        }
+        if (expFloatTextRef.value) {
+          expFloatTextRef.value.showFloatExp(
+            event.data.newLevel,
+            undefined,
+            undefined,
+            undefined,
+            'levelup'
+          );
+        }
+        addNotification(`🎉 恭喜升级到 Lv.${event.data.newLevel}！获得 ${event.data.skillPointsGained} 天赋点`, 'success');
+        break;
+      case 'skill_point_gained':
+        if (expFloatTextRef.value) {
+          expFloatTextRef.value.showFloatExp(
+            event.data.pointsGained,
+            undefined,
+            undefined,
+            undefined,
+            'skillpoint'
+          );
+        }
+        break;
+      case 'skill_unlocked':
+        const skillName = event.data.node?.name || event.data.nodeId;
+        const levelText = event.data.isMaxLevel ? '（已满级）' : ` Lv.${event.data.newLevel}`;
+        addNotification(`✨ 解锁技能：${skillName}${levelText}`, 'success');
+        break;
+    }
+  }
+
+  function setLevelUpModalRef(ref: any) {
+    levelUpModalRef.value = ref;
+  }
+
+  function setExpFloatTextRef(ref: any) {
+    expFloatTextRef.value = ref;
   }
 
   function checkAchievements() {
@@ -1556,6 +1616,8 @@ export const useGameStore = defineStore('game', () => {
     mineTile,
     buyMineStaminaPotion,
     exitMine,
-    endMineExploration
+    endMineExploration,
+    setLevelUpModalRef,
+    setExpFloatTextRef
   };
 });
