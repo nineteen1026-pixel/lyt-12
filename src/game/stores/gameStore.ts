@@ -55,6 +55,12 @@ export const useGameStore = defineStore('game', () => {
   
   const levelUpModalRef = ref<{ showLevelUp: (levelUp: LevelUpResult) => void } | null>(null);
   const expFloatTextRef = ref<{ showFloatExp: (amount: number, reason?: string, x?: number, y?: number, type?: 'exp' | 'levelup' | 'skillpoint') => void } | null>(null);
+  
+  let expMergeTimer: number | null = null;
+  let expMergeTotal = 0;
+  let expMergeReason = '';
+  let expMergeX: number | undefined = undefined;
+  let expMergeY: number | undefined = undefined;
 
   const coins = computed(() => gameState.value?.coins ?? 0);
   const season = computed(() => mapGrid.value?.getSeason() ?? 'spring');
@@ -385,13 +391,12 @@ export const useGameStore = defineStore('game', () => {
   function handleSkillEvent(event: SkillEvent) {
     switch (event.type) {
       case 'experience_gained':
-        if (expFloatTextRef.value && event.data.amount > 0) {
-          expFloatTextRef.value.showFloatExp(
+        if (event.data.amount > 0) {
+          addExpToMerge(
             event.data.amount,
             event.data.reason,
-            undefined,
-            undefined,
-            'exp'
+            expMergeX,
+            expMergeY
           );
         }
         break;
@@ -403,8 +408,8 @@ export const useGameStore = defineStore('game', () => {
           expFloatTextRef.value.showFloatExp(
             event.data.newLevel,
             undefined,
-            undefined,
-            undefined,
+            expMergeX,
+            expMergeY,
             'levelup'
           );
         }
@@ -415,8 +420,8 @@ export const useGameStore = defineStore('game', () => {
           expFloatTextRef.value.showFloatExp(
             event.data.pointsGained,
             undefined,
-            undefined,
-            undefined,
+            expMergeX,
+            expMergeY,
             'skillpoint'
           );
         }
@@ -429,12 +434,72 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
+  function addExpToMerge(amount: number, reason: string, x?: number, y?: number) {
+    expMergeTotal += amount;
+    if (expMergeReason === '') {
+      expMergeReason = reason;
+    }
+    if (x !== undefined) {
+      expMergeX = x;
+    }
+    if (y !== undefined) {
+      expMergeY = y;
+    }
+
+    if (expMergeTimer !== null) {
+      clearTimeout(expMergeTimer);
+    }
+
+    expMergeTimer = window.setTimeout(() => {
+      flushExpMerge();
+    }, 150);
+  }
+
+  function flushExpMerge() {
+    if (expMergeTimer !== null) {
+      clearTimeout(expMergeTimer);
+      expMergeTimer = null;
+    }
+
+    if (expMergeTotal > 0 && expFloatTextRef.value) {
+      expFloatTextRef.value.showFloatExp(
+        expMergeTotal,
+        expMergeReason,
+        expMergeX,
+        expMergeY,
+        'exp'
+      );
+    }
+
+    expMergeTotal = 0;
+    expMergeReason = '';
+    expMergeX = undefined;
+    expMergeY = undefined;
+  }
+
+  function setNextExpPosition(screenX: number, screenY: number) {
+    expMergeX = screenX;
+    expMergeY = screenY;
+  }
+
   function setLevelUpModalRef(ref: any) {
     levelUpModalRef.value = ref;
   }
 
   function setExpFloatTextRef(ref: any) {
     expFloatTextRef.value = ref;
+  }
+
+  function showExpFloatAtScreen(
+    screenX: number,
+    screenY: number,
+    amount: number,
+    reason?: string,
+    type: 'exp' | 'levelup' | 'skillpoint' = 'exp'
+  ) {
+    if (expFloatTextRef.value) {
+      expFloatTextRef.value.showFloatExp(amount, reason, screenX, screenY, type);
+    }
   }
 
   function checkAchievements() {
@@ -1618,6 +1683,8 @@ export const useGameStore = defineStore('game', () => {
     exitMine,
     endMineExploration,
     setLevelUpModalRef,
-    setExpFloatTextRef
+    setExpFloatTextRef,
+    showExpFloatAtScreen,
+    setNextExpPosition
   };
 });

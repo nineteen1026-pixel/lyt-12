@@ -305,7 +305,9 @@ export class FarmScene extends Phaser.Scene {
       container.add(effectOverlay);
     }
 
-    container.on('pointerdown', () => {
+    container.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      const screenPos = this.getPointerScreenPosition(pointer);
+      this.gameStore.setNextExpPosition(screenPos.x, screenPos.y);
       this.onPlotClick(plot.x, plot.y);
     });
 
@@ -379,7 +381,9 @@ export class FarmScene extends Phaser.Scene {
         container.add(heartText);
       }
 
-      container.on('pointerdown', () => {
+      container.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        const screenPos = this.getPointerScreenPosition(pointer);
+        this.gameStore.setNextExpPosition(screenPos.x, screenPos.y);
         this.onAnimalClick(animal.id);
         this.refreshAnimals();
       });
@@ -405,6 +409,17 @@ export class FarmScene extends Phaser.Scene {
 
   private onAnimalClick(animalId: string) {
     this.gameStore.handleAnimalClick(animalId);
+  }
+
+  private getPointerScreenPosition(pointer: Phaser.Input.Pointer): { x: number; y: number } {
+    const canvas = this.game.canvas;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = rect.width / canvas.width;
+    const scaleY = rect.height / canvas.height;
+    return {
+      x: rect.left + pointer.x * scaleX,
+      y: rect.top + pointer.y * scaleY
+    };
   }
 
   private refreshPlot(x: number, y: number) {
