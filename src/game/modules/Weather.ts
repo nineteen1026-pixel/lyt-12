@@ -173,6 +173,15 @@ export class Weather {
     return [...this.state.forecast];
   }
 
+  checkAndIssueInitialWarning(currentDay: number = 1): WeatherWarning | null {
+    const nextWeather = this.state.forecast[0];
+    const nextSeverity = this.state.forecastSeverities[0] ?? 'normal';
+    if (!nextWeather) return null;
+    if (!DANGEROUS_WEATHER.includes(nextWeather)) return null;
+    if (nextSeverity !== 'severe') return null;
+    return this.issueWarning(currentDay + 1);
+  }
+
   issueWarning(targetDay: number): WeatherWarning | null {
     if (this.state.forecast.length === 0) {
       this.generateForecast(3);
@@ -181,6 +190,8 @@ export class Weather {
     const nextSeverity = this.state.forecastSeverities[0] ?? 'normal';
     if (!nextWeather) return null;
     if (!DANGEROUS_WEATHER.includes(nextWeather)) return null;
+    if (nextSeverity !== 'severe') return null;
+    if (this.lastIssuedWarning && this.lastIssuedWarning.targetDay === targetDay) return null;
 
     const message = this.buildWarningMessage(nextWeather, nextSeverity);
     const warning: WeatherWarning = {
@@ -261,7 +272,9 @@ export class Weather {
       }
 
       let warning: WeatherWarning | undefined;
-      if (DANGEROUS_WEATHER.includes(this.state.current) && this.state.currentSeverity === 'severe') {
+      const nextWeather = this.state.forecast[0];
+      const nextSeverity = this.state.forecastSeverities[0] ?? 'normal';
+      if (DANGEROUS_WEATHER.includes(nextWeather) && nextSeverity === 'severe') {
         const w = this.issueWarning(currentDay + 1);
         if (w) warning = w;
       }

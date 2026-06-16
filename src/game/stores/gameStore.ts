@@ -152,6 +152,12 @@ export const useGameStore = defineStore('game', () => {
       } else if (gameState.value.weather.forecastSeverities.length === 0) {
         gameState.value.weather.forecastSeverities = weather.value.getForecastSeverities();
       }
+      const loadedWarning = weather.value.checkAndIssueInitialWarning(mapGrid.value.getDay());
+      if (loadedWarning) {
+        activeWeatherWarning.value = loadedWarning;
+        if (statistics.value) statistics.value.recordWeatherWarningReceived();
+        addNotification(loadedWarning.message, 'error');
+      }
       shop.value = new Shop(
         inventory.value,
         mapGrid.value,
@@ -316,6 +322,12 @@ export const useGameStore = defineStore('game', () => {
         const forecast = weather.value.generateForecast(3);
         gameState.value.weather.forecast = forecast;
         gameState.value.weather.forecastSeverities = weather.value.getForecastSeverities();
+      }
+      const initialWarning = weather.value.checkAndIssueInitialWarning(gameState.value.day);
+      if (initialWarning) {
+        activeWeatherWarning.value = initialWarning;
+        if (statistics.value) statistics.value.recordWeatherWarningReceived();
+        addNotification(initialWarning.message, 'error');
       }
       shop.value = new Shop(
         inventory.value,
