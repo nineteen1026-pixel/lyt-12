@@ -26,14 +26,26 @@ const startCooldownTimer = () => {
   }, 1000);
 };
 
-const handleFish = () => {
+const setExpPosFromEvent = (event: MouseEvent | Event) => {
+  const mouseEvent = event as MouseEvent;
+  if (mouseEvent.clientX !== undefined && mouseEvent.clientY !== undefined) {
+    gameStore.setNextExpPosition(mouseEvent.clientX, mouseEvent.clientY);
+  } else if (event.target) {
+    const rect = (event.target as HTMLElement).getBoundingClientRect();
+    gameStore.setNextExpPosition(rect.left + rect.width / 2, rect.top + rect.height / 2);
+  }
+};
+
+const handleFish = (event: MouseEvent | Event) => {
+  setExpPosFromEvent(event);
   const result = gameStore.tryFish();
   if (!result.success) {
     startCooldownTimer();
   }
 };
 
-const handleDig = () => {
+const handleDig = (event: MouseEvent | Event) => {
+  setExpPosFromEvent(event);
   const result = gameStore.tryDig();
   if (!result.success) {
     startCooldownTimer();
@@ -141,7 +153,7 @@ const toggleBuildingsPanel = () => {
     <div 
       class="tool-btn flex flex-col items-center justify-center w-16 h-16 bg-farm-ui-dark border-3 border-farm-wood-dark cursor-pointer transition-all hover:bg-farm-gold hover:scale-105 active:scale-95 relative"
       :class="{ 'opacity-50 cursor-wait': fishCooldown > 0 }"
-      @click="handleFish"
+      @click="handleFish($event)"
     >
       <span class="text-2xl">🎣</span>
       <span class="font-pixel text-[8px] text-farm-wood-dark mt-1">钓鱼</span>

@@ -47,7 +47,18 @@ const selectSkill = (id: string) => {
   selectedSkill.value = selectedSkill.value === id ? null : id;
 };
 
-const unlockSkill = (id: string) => {
+const setExpPosFromEvent = (event: MouseEvent | Event) => {
+  const mouseEvent = event as MouseEvent;
+  if (mouseEvent.clientX !== undefined && mouseEvent.clientY !== undefined) {
+    gameStore.setNextExpPosition(mouseEvent.clientX, mouseEvent.clientY);
+  } else if (event.target) {
+    const rect = (event.target as HTMLElement).getBoundingClientRect();
+    gameStore.setNextExpPosition(rect.left + rect.width / 2, rect.top + rect.height / 2);
+  }
+};
+
+const unlockSkill = (id: string, event: MouseEvent | Event) => {
+  setExpPosFromEvent(event);
   const result = gameStore.unlockSkillNode(id);
   if (result.success) {
     selectedSkill.value = null;
@@ -287,7 +298,7 @@ const formatNumber = (num: number) => {
                     'bg-gray-200 cursor-not-allowed opacity-50': !skill.canUnlock
                   }"
                   :disabled="!skill.canUnlock"
-                  @click.stop="unlockSkill(skill.id)"
+                  @click.stop="unlockSkill(skill.id, $event)"
                 >
                   <span v-if="skill.canUnlock">✨ 解锁 (消耗1天赋点)</span>
                   <span v-else>{{ skill.unlockReason }}</span>

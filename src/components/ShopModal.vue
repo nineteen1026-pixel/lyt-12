@@ -33,16 +33,29 @@ const setQuantity = (itemId: string, value: number) => {
   buyQuantity.value[itemId] = Math.max(1, value);
 };
 
-const buy = (itemId: string) => {
+const setExpPosFromEvent = (event: MouseEvent | Event) => {
+  const mouseEvent = event as MouseEvent;
+  if (mouseEvent.clientX !== undefined && mouseEvent.clientY !== undefined) {
+    gameStore.setNextExpPosition(mouseEvent.clientX, mouseEvent.clientY);
+  } else if (event.target) {
+    const rect = (event.target as HTMLElement).getBoundingClientRect();
+    gameStore.setNextExpPosition(rect.left + rect.width / 2, rect.top + rect.height / 2);
+  }
+};
+
+const buy = (itemId: string, event: MouseEvent | Event) => {
+  setExpPosFromEvent(event);
   const qty = getQuantity(itemId);
   gameStore.buyItem(itemId, qty);
 };
 
-const sell = (itemId: string, quantity: number, quality?: QualityGrade) => {
+const sell = (itemId: string, quantity: number, quality?: QualityGrade, event?: MouseEvent | Event) => {
+  if (event) setExpPosFromEvent(event);
   gameStore.sellItem(itemId, quantity, quality);
 };
 
-const expand = () => {
+const expand = (event: MouseEvent | Event) => {
+  setExpPosFromEvent(event);
   gameStore.expandPlot();
 };
 
@@ -126,7 +139,7 @@ const getCropForSeed = (itemId: string) => {
                   class="font-pixel text-xs px-3 py-2 border-2 border-farm-wood-dark transition-colors"
                   :class="canAfford ? 'bg-farm-gold hover:bg-farm-gold-dark text-farm-wood-dark' : 'bg-gray-400 text-gray-600 cursor-not-allowed'"
                   :disabled="!canAfford"
-                  @click="buy(item.id)"
+                  @click="buy(item.id, $event)"
                 >
                   购买
                 </button>
@@ -150,7 +163,7 @@ const getCropForSeed = (itemId: string) => {
                   class="font-pixel text-xs px-4 py-2 border-2 border-farm-wood-dark transition-colors"
                   :class="canExpand ? 'bg-farm-gold hover:bg-farm-gold-dark text-farm-wood-dark' : 'bg-gray-400 text-gray-600 cursor-not-allowed'"
                   :disabled="!canExpand"
-                  @click="expand"
+                  @click="expand($event)"
                 >
                   解锁
                 </button>
@@ -181,14 +194,14 @@ const getCropForSeed = (itemId: string) => {
                 <span class="font-pixel text-sm text-farm-gold-dark">💰{{ sellPrice }}/个</span>
                 <button 
                   class="font-pixel text-xs px-3 py-2 bg-farm-gold border-2 border-farm-wood-dark hover:bg-farm-gold-dark transition-colors text-farm-wood-dark"
-                  @click="sell(item.id, 1, quality)"
+                  @click="sell(item.id, 1, quality, $event)"
                 >
                   卖1个
                 </button>
                 <button 
                   v-if="quantity > 1"
                   class="font-pixel text-xs px-3 py-2 bg-farm-gold border-2 border-farm-wood-dark hover:bg-farm-gold-dark transition-colors text-farm-wood-dark"
-                  @click="sell(item.id, quantity, quality)"
+                  @click="sell(item.id, quantity, quality, $event)"
                 >
                   全卖
                 </button>
