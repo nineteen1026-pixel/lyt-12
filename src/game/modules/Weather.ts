@@ -64,6 +64,16 @@ export class Weather {
     };
     this.season = season;
     this.buildings = buildings;
+
+    if (this.state.lastIssuedWarningTargetDay != null) {
+      this.lastIssuedWarning = {
+        weather: this.state.forecast[0] ?? 'sunny',
+        severity: 'severe',
+        message: '',
+        issuedAt: 0,
+        targetDay: this.state.lastIssuedWarningTargetDay
+      };
+    }
   }
 
   setBuildings(buildings: WeatherBuildingsAccess): void {
@@ -203,6 +213,7 @@ export class Weather {
     };
 
     this.lastIssuedWarning = warning;
+    this.state.lastIssuedWarningTargetDay = targetDay;
     return warning;
   }
 
@@ -212,6 +223,7 @@ export class Weather {
 
   clearLastWarning(): void {
     this.lastIssuedWarning = null;
+    this.state.lastIssuedWarningTargetDay = undefined;
   }
 
   private buildWarningMessage(weather: WeatherType, severity: WeatherSeverity): string {
@@ -269,6 +281,11 @@ export class Weather {
       while (this.state.forecast.length < 3) {
         this.state.forecast.push(this.pickWeatherBySeason());
         this.state.forecastSeverities.push(this.pickSeverity());
+      }
+
+      if (this.state.lastIssuedWarningTargetDay != null && this.state.lastIssuedWarningTargetDay <= currentDay) {
+        this.lastIssuedWarning = null;
+        this.state.lastIssuedWarningTargetDay = undefined;
       }
 
       let warning: WeatherWarning | undefined;

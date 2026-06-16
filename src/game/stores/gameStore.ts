@@ -152,12 +152,18 @@ export const useGameStore = defineStore('game', () => {
       } else if (gameState.value.weather.forecastSeverities.length === 0) {
         gameState.value.weather.forecastSeverities = weather.value.getForecastSeverities();
       }
-      const loadedWarning = weather.value.checkAndIssueInitialWarning(mapGrid.value.getDay());
-      if (loadedWarning) {
-        activeWeatherWarning.value = loadedWarning;
-        if (statistics.value) statistics.value.recordWeatherWarningReceived();
-        addNotification(loadedWarning.message, 'error');
+
+      if (savedGame.state.activeWeatherWarning) {
+        activeWeatherWarning.value = savedGame.state.activeWeatherWarning;
+      } else {
+        const loadedWarning = weather.value.checkAndIssueInitialWarning(mapGrid.value.getDay());
+        if (loadedWarning) {
+          activeWeatherWarning.value = loadedWarning;
+          if (statistics.value) statistics.value.recordWeatherWarningReceived();
+          addNotification(loadedWarning.message, 'error');
+        }
       }
+
       shop.value = new Shop(
         inventory.value,
         mapGrid.value,
@@ -286,6 +292,7 @@ export const useGameStore = defineStore('game', () => {
         gameState.value.season = mapGrid.value.getSeason();
         gameState.value.day = mapGrid.value.getDay();
         gameState.value.weather = weather.value.getState();
+        gameState.value.activeWeatherWarning = activeWeatherWarning.value;
         gameState.value.reputation = orders.value.getReputation();
       }
 
@@ -619,6 +626,7 @@ export const useGameStore = defineStore('game', () => {
     gameState.value.day = mapGrid.value.getDay();
     gameState.value.lastSeasonAdvance = mapGrid.value.getLastSeasonAdvance();
     gameState.value.weather = weather.value.getState();
+    gameState.value.activeWeatherWarning = activeWeatherWarning.value;
     gameState.value.reputation = orders.value.getReputation();
 
     const rawState = JSON.parse(JSON.stringify(toRaw(gameState.value)));

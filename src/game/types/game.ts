@@ -75,6 +75,7 @@ export interface WeatherState {
   forecastSeverities: WeatherSeverity[];
   lastWeatherChange: number;
   lastDayWeather: number;
+  lastIssuedWarningTargetDay?: number;
 }
 
 export interface Animal {
@@ -169,6 +170,7 @@ export interface GameState {
   weather: WeatherState;
   reputation: ReputationState;
   lastOrderRefreshDay: number;
+  activeWeatherWarning?: WeatherWarning | null;
 }
 
 export interface InventoryItem {

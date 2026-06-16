@@ -278,7 +278,8 @@ class GameDatabase {
         forecast: [],
         forecastSeverities: [],
         lastWeatherChange: now,
-        lastDayWeather: now
+        lastDayWeather: now,
+        lastIssuedWarningTargetDay: undefined
       }
     };
 
@@ -374,6 +375,7 @@ class GameDatabase {
       const wAny = state.weather as any;
       if (!wAny.currentSeverity) wAny.currentSeverity = 'normal';
       if (!wAny.forecastSeverities) wAny.forecastSeverities = [];
+      if (wAny.lastIssuedWarningTargetDay === undefined) wAny.lastIssuedWarningTargetDay = undefined;
     }
 
     if (!state.reputation) {
