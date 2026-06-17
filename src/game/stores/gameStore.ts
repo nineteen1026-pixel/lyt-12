@@ -135,6 +135,7 @@ export const useGameStore = defineStore('game', () => {
   const showShareCard = ref(false);
   const currentShareCardDataUrl = ref<string | null>(null);
   const showMiningModal = ref(false);
+  const showPetPanel = ref(false);
   const currentMineSession = ref<MineSession | null>(null);
   const activeWeatherWarning = ref<WeatherWarning | null>(null);
 
@@ -1986,6 +1987,18 @@ export const useGameStore = defineStore('game', () => {
     showExpFloatAtScreen,
     setNextExpPosition,
     activeWeatherWarning,
-    dismissWeatherWarning
+    dismissWeatherWarning,
+    pets,
+    activePet,
+    petCount,
+    totalPetCount,
+    petBonuses,
+    showPetPanel,
+    adoptPet,
+    releasePet,
+    setActivePet,
+    petAnimal,
+    feedPet,
+    renamePet
   };
 });

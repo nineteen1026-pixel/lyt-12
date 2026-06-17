@@ -186,6 +186,20 @@ const toggleBuildingsPanel = () => {
 
     <div 
       class="tool-btn flex flex-col items-center justify-center w-16 h-16 bg-farm-ui-dark border-3 border-farm-wood-dark cursor-pointer transition-all hover:bg-farm-gold hover:scale-105 active:scale-95 relative"
+      @click="gameStore.showPetPanel = true"
+    >
+      <span class="text-2xl">🐾</span>
+      <span class="font-pixel text-[8px] text-farm-wood-dark mt-1">宠物</span>
+      <span 
+        v-if="gameStore.totalPetCount > 0"
+        class="absolute -top-1 -right-1 w-5 h-5 bg-pink-500 text-white font-pixel text-[10px] rounded-full flex items-center justify-center border-2 border-farm-wood-dark"
+      >
+        {{ gameStore.totalPetCount }}
+      </span>
+    </div>
+
+    <div 
+      class="tool-btn flex flex-col items-center justify-center w-16 h-16 bg-farm-ui-dark border-3 border-farm-wood-dark cursor-pointer transition-all hover:bg-farm-gold hover:scale-105 active:scale-95 relative"
       @click="gameStore.showAchievements = true"
     >
       <span class="text-2xl">🏆</span>

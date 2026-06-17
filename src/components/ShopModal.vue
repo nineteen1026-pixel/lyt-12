@@ -2,11 +2,12 @@
 import { ref, computed } from 'vue';
 import { useGameStore } from '../game/stores/gameStore';
 import { getCropConfig } from '../game/data/crops';
+import { getAllPetConfigs, getPetConfig } from '../game/data/pets';
 import { QUALITY_COLORS, QUALITY_NAMES } from '../game/types/game';
-import type { QualityGrade } from '../game/types/game';
+import type { QualityGrade, PetType } from '../game/types/game';
 
 const gameStore = useGameStore();
-const activeTab = ref<'buy' | 'sell'>('buy');
+const activeTab = ref<'buy' | 'sell' | 'pet'>('buy');
 const buyQuantity = ref<Record<string, number>>({});
 
 const buyItems = computed(() => {
@@ -25,6 +26,13 @@ const expandPrice = computed(() => {
 
 const canExpand = computed(() => {
   return gameStore.shop?.canExpandPlot() || false;
+});
+
+const petList = computed(() => {
+  return getAllPetConfigs().map(config => ({
+    ...config,
+    canAfford: gameStore.coins >= config.price
+  }));
 });
 
 const getQuantity = (itemId: string) => buyQuantity.value[itemId] || 1;
@@ -63,6 +71,23 @@ const getCropForSeed = (itemId: string) => {
   const cropType = itemId.replace('_seed', '');
   return getCropConfig(cropType);
 };
+
+const handleAdoptPet = (type: PetType, event: MouseEvent | Event) => {
+  setExpPosFromEvent(event);
+  gameStore.adoptPet(type);
+};
+
+const bonusTypeNames: Record<string, string> = {
+  crop_growth_speed: '作物生长',
+  crop_yield: '作物产量',
+  crop_quality: '作物品质',
+  animal_production_speed: '家畜产出',
+  animal_yield: '家畜产量',
+  animal_quality: '家畜品质',
+  water_bonus: '浇水加成',
+  feed_bonus: '喂食加成',
+  rare_chance: '稀有几率'
+};
 </script>
 
 <template>
@@ -96,6 +121,13 @@ const getCropForSeed = (itemId: string) => {
           @click="activeTab = 'sell'"
         >
           💰 出售
+        </button>
+        <button 
+          class="font-pixel text-sm px-6 py-2 border-2 border-farm-wood-dark transition-colors"
+          :class="activeTab === 'pet' ? 'bg-farm-gold' : 'bg-farm-ui-dark hover:bg-farm-gold/50'"
+          @click="activeTab = 'pet'"
+        >
+          🐾 宠物
         </button>
       </div>
       
@@ -172,7 +204,7 @@ const getCropForSeed = (itemId: string) => {
           </div>
         </template>
         
-        <template v-else>
+        <template v-else-if="activeTab === 'sell'">
           <div v-if="sellItems.length > 0" class="space-y-3">
             <div 
               v-for="{ item, quantity, sellPrice, quality } in sellItems" 
@@ -212,6 +244,45 @@ const getCropForSeed = (itemId: string) => {
             <span class="text-4xl">📦</span>
             <p class="font-pixel text-sm text-farm-wood-dark mt-2">没有可出售的物品</p>
             <p class="font-pixel text-[10px] text-farm-wood-dark/60 mt-1">去种植作物或养殖动物吧！</p>
+          </div>
+        </template>
+
+        <template v-if="activeTab === 'pet'">
+          <div class="space-y-3">
+            <div 
+              v-for="pet in petList" 
+              :key="pet.id"
+              class="flex items-start gap-4 p-4 bg-farm-ui-dark border-2 border-farm-wood-dark"
+            >
+              <div class="flex flex-col items-center">
+                <span class="text-4xl">{{ pet.icon }}</span>
+                <span class="font-pixel text-[9px] mt-1" :style="{ color: pet.color }">{{ pet.name }}</span>
+              </div>
+              <div class="flex-1">
+                <div class="font-pixel text-sm text-farm-wood-dark">{{ pet.name }}</div>
+                <div class="font-pixel text-[10px] text-farm-wood-dark/70 mt-1">{{ pet.description }}</div>
+                <div class="flex flex-wrap gap-2 mt-2">
+                  <span 
+                    v-for="bonus in pet.bonuses" 
+                    :key="bonus.type"
+                    class="font-pixel text-[9px] px-2 py-0.5 bg-farm-gold/30 border border-farm-gold/50 text-farm-wood-dark"
+                  >
+                    {{ bonusTypeNames[bonus.type] }} +{{ (bonus.value * 100).toFixed(0) }}%
+                  </span>
+                </div>
+              </div>
+              <div class="flex flex-col items-end gap-2">
+                <span class="font-pixel text-sm text-farm-gold-dark">💰{{ pet.price }}</span>
+                <button 
+                  class="font-pixel text-xs px-4 py-2 border-2 border-farm-wood-dark transition-colors"
+                  :class="pet.canAfford ? 'bg-farm-gold hover:bg-farm-gold-dark text-farm-wood-dark' : 'bg-gray-400 text-gray-600 cursor-not-allowed'"
+                  :disabled="!pet.canAfford"
+                  @click="handleAdoptPet(pet.type as PetType, $event)"
+                >
+                  领养
+                </button>
+              </div>
+            </div>
           </div>
         </template>
       </div>
