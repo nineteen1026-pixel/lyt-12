@@ -217,10 +217,6 @@ export class VillagerRelations {
       }
     }
 
-    if (newStage === 5) {
-      this.state.storylinesCompleted++;
-    }
-
     return { codexTriggers, achievementTriggers };
   }
 
@@ -357,6 +353,7 @@ export class VillagerRelations {
         const isStage5Ending = currentNode.id.endsWith('_s5_end');
         if (isStage5Ending && !relation.storylineCompleted) {
           relation.storylineCompleted = true;
+          this.state.storylinesCompleted++;
           if (this.statisticsAccess) {
             this.statisticsAccess.recordVillagerStorylineCompleted(villagerId);
           }
@@ -503,6 +500,9 @@ export class VillagerRelations {
 
     const result = this.addAffinity(villagerId, gain);
     relation.lastInteractTime = Date.now();
+    if (result.stageAdvanced) {
+      this.emitRelationChange(villagerId, gain, result);
+    }
     return gain;
   }
 
@@ -538,6 +538,9 @@ export class VillagerRelations {
 
     const result = this.addAffinity(villagerId, affinityDelta);
     relation.lastInteractTime = Date.now();
+    if (result.stageAdvanced || result.stageCodexTriggers.length > 0) {
+      this.emitRelationChange(villagerId, affinityDelta, result);
+    }
 
     return {
       success: true,
@@ -545,6 +548,34 @@ export class VillagerRelations {
       affinityDelta,
       newStage: result.newStage
     };
+  }
+
+  private emitRelationChange(
+    villagerId: string,
+    affinityGained: number,
+    addResult: ReturnType<VillagerRelations['addAffinity']>
+  ): void {
+    const relation = this.state.relations[villagerId];
+    const unlockedOrders: string[] = [];
+    if (relation && addResult.stageAdvanced) {
+      for (const orderId of relation.unlockedExclusiveOrderIds) {
+        if (!relation.completedExclusiveOrderIds.includes(orderId)) {
+          unlockedOrders.push(orderId);
+        }
+      }
+    }
+    const dialogueResult: DialogueResult = {
+      villagerId,
+      nodeId: '',
+      affinityGained,
+      stageAdvanced: addResult.stageAdvanced,
+      newStage: addResult.newStage,
+      unlockedOrders,
+      unlockedRewards: [],
+      codexTriggers: addResult.stageCodexTriggers,
+      achievementTriggers: addResult.stageAchievementTriggers
+    };
+    this.notify(dialogueResult);
   }
 
   completeExclusiveOrder(villagerId: string, orderId: string): boolean {
