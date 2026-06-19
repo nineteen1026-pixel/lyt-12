@@ -759,3 +759,74 @@ export interface WorkerHarvestShare {
   quantity: number;
   quality: QualityGrade;
 }
+
+export type AuctionStatus = 'upcoming' | 'active' | 'ended';
+
+export interface AuctionItem {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  rarity: Rarity;
+  startingPrice: number;
+  currentBid: number;
+  minBidIncrement: number;
+  itemId?: string;
+  itemQuantity?: number;
+  itemQuality?: QualityGrade;
+  bonusCoins?: number;
+  bonusReputation?: number;
+  bonusAffinity?: { villagerId: string; amount: number }[];
+}
+
+export interface AuctionState {
+  id: string;
+  currentAuctionId: string | null;
+  status: AuctionStatus;
+  items: AuctionItem[];
+  currentItemIndex: number;
+  startTime: number;
+  endTime: number;
+  lastAuctionDay: number;
+  totalAuctionsHeld: number;
+  totalAuctionsWon: number;
+  totalCoinsSpent: number;
+  wonItems: Array<{
+    auctionId: string;
+    itemId: string;
+    itemName: string;
+    finalPrice: number;
+    wonAt: number;
+  }>;
+  economicBalanceFactor: number;
+}
+
+export interface AuctionBidResult {
+  success: boolean;
+  message: string;
+  newBid?: number;
+}
+
+export interface AuctionSettleResult {
+  item: AuctionItem;
+  won: boolean;
+  finalPrice: number;
+  rewards?: {
+    items?: Array<{ itemId: string; quantity: number; quality?: QualityGrade }>;
+    coins?: number;
+    reputation?: number;
+    affinity?: Array<{ villagerId: string; amount: number }>;
+  };
+  economicImpact: number;
+  reputationImpact: number;
+}
+
+export const AUCTION_DURATION = 30000;
+export const AUCTION_ITEMS_PER_SESSION = 3;
+export const AUCTION_WEEKEND_DAYS = [6, 7];
+export const AUCTION_MIN_BID_INCREMENT = 10;
+export const AUCTION_ECONOMIC_BALANCE_BASE = 1.0;
+export const AUCTION_ECONOMIC_BALANCE_MAX = 2.0;
+export const AUCTION_ECONOMIC_BALANCE_MIN = 0.5;
+export const AUCTION_REPUTATION_BONUS_BASE = 5;
+export const AUCTION_REPUTATION_PENALTY_BASE = 3;

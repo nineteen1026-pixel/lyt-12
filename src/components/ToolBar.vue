@@ -58,6 +58,16 @@ const tools = computed(() => [
   { id: 'hand' as const, icon: '✋', name: '手', desc: '播种/收获' }
 ]);
 
+const isWeekend = computed(() => {
+  const dayOfWeek = ((gameStore.day - 1) % 7) + 1;
+  return dayOfWeek === 6 || dayOfWeek === 7;
+});
+
+const auctionActive = computed(() => {
+  const state = gameStore.getAuctionState();
+  return state && state.status === 'active';
+});
+
 const availableSeeds = computed(() => {
   if (!gameStore.inventory) return [];
   const seeds = gameStore.inventory.getSeeds();
@@ -208,6 +218,27 @@ const toggleBuildingsPanel = () => {
         class="absolute -top-1 -right-1 w-5 h-5 bg-orange-400 text-white font-pixel text-[10px] rounded-full flex items-center justify-center border-2 border-farm-wood-dark"
       >
         {{ gameStore.farmHireUsedSlots }}
+      </span>
+    </div>
+
+    <div 
+      class="tool-btn flex flex-col items-center justify-center w-16 h-16 bg-gradient-to-b from-purple-600 to-purple-800 border-3 border-purple-950 cursor-pointer transition-all hover:from-purple-500 hover:to-purple-700 hover:scale-105 active:scale-95 relative shadow-lg"
+      :class="{ 'opacity-50 cursor-not-allowed': !isWeekend && !auctionActive }"
+      @click="gameStore.toggleAuctionModal()"
+    >
+      <span class="text-2xl">🎪</span>
+      <span class="font-pixel text-[8px] text-purple-100 mt-1">拍卖</span>
+      <span 
+        v-if="isWeekend && !auctionActive"
+        class="absolute -top-1 -right-1 w-5 h-5 bg-yellow-400 text-white font-pixel text-[10px] rounded-full flex items-center justify-center border-2 border-farm-wood-dark animate-pulse"
+      >
+        !
+      </span>
+      <span 
+        v-else-if="auctionActive"
+        class="absolute -top-1 -right-1 w-5 h-5 bg-green-400 text-white font-pixel text-[10px] rounded-full flex items-center justify-center border-2 border-farm-wood-dark"
+      >
+        ●
       </span>
     </div>
 

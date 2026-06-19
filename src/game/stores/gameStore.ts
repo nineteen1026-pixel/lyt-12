@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed, toRaw } from 'vue';
-import type { GameState, Plot, Animal, Pet, PetType, InventoryItem, ToolType, Season, WeatherType, WeatherState, WeatherSeverity, WeatherWarning, Order, Building, BuildingType, BuildingConfig, GameStats, AchievementProgress, CodexEntry, QualityGrade, SkillTreeState, SkillEffectBonus, SkillNode, LevelUpResult, PetCompanionBonus, AffinityStage, DialogueResult, ExclusiveOrderTemplate, FarmHireState, FarmWorkerTaskType } from '../types/game';
+import type { GameState, Plot, Animal, Pet, PetType, InventoryItem, ToolType, Season, WeatherType, WeatherState, WeatherSeverity, WeatherWarning, Order, Building, BuildingType, BuildingConfig, GameStats, AchievementProgress, CodexEntry, QualityGrade, SkillTreeState, SkillEffectBonus, SkillNode, LevelUpResult, PetCompanionBonus, AffinityStage, DialogueResult, ExclusiveOrderTemplate, FarmHireState, FarmWorkerTaskType, AuctionItem, AuctionBidResult, AuctionSettleResult } from '../types/game';
 import { QUALITY_PRICE_MULTIPLIER, QUALITY_NAMES, DAY_DURATION } from '../types/game';
 import { MapGrid } from '../modules/MapGrid';
 import { CropGrowth } from '../modules/CropGrowth';
@@ -20,6 +20,7 @@ import { shareCardGenerator } from '../modules/ShareCard';
 import { getQualitySellPrice, getQualityStars } from '../modules/Quality';
 import { VillagerRelations, type DialogueAdvanceResult } from '../modules/VillagerRelations';
 import { FarmHire, createInitialFarmHireState } from '../modules/FarmHire';
+import { AuctionSystem } from '../modules/Auction';
 import { gameDB } from '../db';
 import { getItem } from '../data/items';
 import { getCropConfig } from '../data/crops';
@@ -34,6 +35,7 @@ import type { MineSession, MineFloor, MineTile, MineExploreResult } from '../typ
 import { createMineSession, generateMineFloor, canMoveTo, getStaminaCost, isAdjacent, revealAround, addItemsToSession, getMineralConfig, MINE_ENTRY_COST, MINE_STAMINA_POTION_COST, MINE_STAMINA_POTION_AMOUNT, TOTAL_MINE_FLOORS } from '../data/mining';
 import { getExclusiveOrderById, getVillagerDetail, STAGE_NAMES, STAGE_COLORS } from '../data/villagers';
 import { getMaxHireSlots, TASK_DESCRIPTIONS, TASK_ICONS } from '../data/farmWorkers';
+import { getAuctionRarityName } from '../data/auction';
 
 export const useGameStore = defineStore('game', () => {
   const gameState = ref<GameState | null>(null);
@@ -52,6 +54,7 @@ export const useGameStore = defineStore('game', () => {
   const codexSystem = ref<CodexSystem | null>(null);
   const villagerRelations = ref<VillagerRelations | null>(null);
   const farmHire = ref<FarmHire | null>(null);
+  const auction = ref<AuctionSystem | null>(null);
   const selectedTool = ref<ToolType>(null);
   const selectedSeed = ref<string | null>(null);
   const selectedBuilding = ref<BuildingType | null>(null);
@@ -60,6 +63,7 @@ export const useGameStore = defineStore('game', () => {
   const showOrders = ref(false);
   const showBuildings = ref(false);
   const showVillagers = ref(false);
+  const showAuction = ref(false);
   const isInitialized = ref(false);
   const notifications = ref<Array<{ id: number; message: string; type: 'success' | 'error' | 'info' }>>([]);
   
@@ -302,6 +306,59 @@ export const useGameStore = defineStore('game', () => {
       });
       farmHire.value.updateReputationLevel(getReputationLevel(gameState.value!.reputation.score).level);
 
+      const auctionCoinAccess_saved = {
+        getCoins: () => shop.value?.getCoins() ?? 0,
+        spendCoins: (amount: number) => {
+          if (shop.value && shop.value.getCoins() >= amount) {
+            shop.value.spendCoins(amount);
+            if (gameState.value) gameState.value.coins = shop.value.getCoins();
+            return true;
+          }
+          return false;
+        },
+        addCoins: (amount: number) => {
+          if (shop.value) {
+            shop.value.addCoins(amount);
+            if (gameState.value) gameState.value.coins = shop.value.getCoins();
+          }
+        }
+      };
+
+      const auctionInventoryAccess_saved = {
+        addItem: (itemId: string, quantity: number, quality?: QualityGrade) => {
+          return inventory.value?.addItem(itemId, quantity, quality) ?? false;
+        }
+      };
+
+      const auctionReputationAccess_saved = {
+        addReputation: (amount: number) => {
+          if (orders.value) {
+            orders.value.addReputation(amount);
+            if (gameState.value) gameState.value.reputation = orders.value.getReputation();
+          }
+        },
+        getReputationScore: () => orders.value?.getReputation().score ?? 0
+      };
+
+      const auctionVillagerAccess_saved = {
+        addAffinity: (villagerId: string, amount: number) => {
+          return villagerRelations.value?.addAffinity(villagerId, amount) ?? {
+            stageAdvanced: false,
+            newStage: 0,
+            stageCodexTriggers: [],
+            stageAchievementTriggers: []
+          };
+        }
+      };
+
+      auction.value = new AuctionSystem(
+        savedGame.auction ?? null,
+        auctionCoinAccess_saved,
+        auctionInventoryAccess_saved,
+        auctionReputationAccess_saved,
+        auctionVillagerAccess_saved
+      );
+
       if (cropGrowth.value) {
         cropGrowth.value.setSkillAccess(combinedBonusAccess);
       }
@@ -535,6 +592,59 @@ export const useGameStore = defineStore('game', () => {
         }
       });
       farmHire.value.updateReputationLevel(getReputationLevel(gameState.value!.reputation.score).level);
+
+      const auctionCoinAccess_new = {
+        getCoins: () => shop.value?.getCoins() ?? 0,
+        spendCoins: (amount: number) => {
+          if (shop.value && shop.value.getCoins() >= amount) {
+            shop.value.spendCoins(amount);
+            if (gameState.value) gameState.value.coins = shop.value.getCoins();
+            return true;
+          }
+          return false;
+        },
+        addCoins: (amount: number) => {
+          if (shop.value) {
+            shop.value.addCoins(amount);
+            if (gameState.value) gameState.value.coins = shop.value.getCoins();
+          }
+        }
+      };
+
+      const auctionInventoryAccess_new = {
+        addItem: (itemId: string, quantity: number, quality?: QualityGrade) => {
+          return inventory.value?.addItem(itemId, quantity, quality) ?? false;
+        }
+      };
+
+      const auctionReputationAccess_new = {
+        addReputation: (amount: number) => {
+          if (orders.value) {
+            orders.value.addReputation(amount);
+            if (gameState.value) gameState.value.reputation = orders.value.getReputation();
+          }
+        },
+        getReputationScore: () => orders.value?.getReputation().score ?? 0
+      };
+
+      const auctionVillagerAccess_new = {
+        addAffinity: (villagerId: string, amount: number) => {
+          return villagerRelations.value?.addAffinity(villagerId, amount) ?? {
+            stageAdvanced: false,
+            newStage: 0,
+            stageCodexTriggers: [],
+            stageAchievementTriggers: []
+          };
+        }
+      };
+
+      auction.value = new AuctionSystem(
+        newGame.auction ?? null,
+        auctionCoinAccess_new,
+        auctionInventoryAccess_new,
+        auctionReputationAccess_new,
+        auctionVillagerAccess_new
+      );
 
       if (cropGrowth.value) {
         cropGrowth.value.setSkillAccess(combinedBonusAccess);
@@ -855,6 +965,7 @@ export const useGameStore = defineStore('game', () => {
     const rawCodex = JSON.parse(JSON.stringify(toRaw(codexSystem.value.getAllEntries())));
     const rawVillagerRelations = JSON.parse(JSON.stringify(toRaw(villagerRelations.value.getState())));
     const rawFarmHire = farmHire.value ? JSON.parse(JSON.stringify(toRaw(farmHire.value.getState()))) : undefined;
+    const rawAuction = auction.value ? JSON.parse(JSON.stringify(toRaw(auction.value.getState()))) : undefined;
 
     await gameDB.saveCompleteGame(
       rawState,
@@ -869,7 +980,8 @@ export const useGameStore = defineStore('game', () => {
       rawCodex,
       rawSkillTree,
       rawVillagerRelations,
-      rawFarmHire
+      rawFarmHire,
+      rawAuction
     );
   }
 
@@ -1817,6 +1929,11 @@ export const useGameStore = defineStore('game', () => {
         }
       }
     }
+
+    if (auction.value && mapGrid.value) {
+      const dayOfWeek = ((mapGrid.value.getDay() - 1) % 7) + 1;
+      auction.value.checkAndUpdateAuction(dayOfWeek);
+    }
   }
 
   function openMiningModal() {
@@ -2211,6 +2328,120 @@ export const useGameStore = defineStore('game', () => {
     return result;
   }
 
+  function openAuctionModal() {
+    showAuction.value = true;
+  }
+
+  function closeAuctionModal() {
+    showAuction.value = false;
+  }
+
+  function toggleAuctionModal() {
+    showAuction.value = !showAuction.value;
+  }
+
+  function startAuction(): { success: boolean; message: string; items?: AuctionItem[] } {
+    if (!auction.value || !mapGrid.value) {
+      return { success: false, message: '系统未初始化' };
+    }
+    const day = ((mapGrid.value.getDay() - 1) % 7) + 1;
+    const result = auction.value.startAuction(day);
+    if (result.success) {
+      addNotification(`🎉 周末拍卖会开始了！共有${auction.value.getState().items.length}件稀有物品`, 'info');
+      saveGame();
+    }
+    return result;
+  }
+
+  function placeBid(bidAmount: number): AuctionBidResult {
+    if (!auction.value) {
+      return { success: false, message: '系统未初始化' };
+    }
+    const result = auction.value.placeBid(bidAmount);
+    if (result.success) {
+      saveGame();
+    }
+    return result;
+  }
+
+  function placeQuickBid(): AuctionBidResult {
+    if (!auction.value) {
+      return { success: false, message: '系统未初始化' };
+    }
+    const result = auction.value.placeQuickBid();
+    if (result.success) {
+      saveGame();
+    }
+    return result;
+  }
+
+  function simulateAuctionNPBid(): { success: boolean; npcBid?: number; npcName?: string } {
+    if (!auction.value) {
+      return { success: false };
+    }
+    const success = auction.value.simulateNPCBid();
+    if (success) {
+      const currentItem = auction.value.getCurrentItem();
+      const npcNames = ['老木匠', '神秘商人', '富家公子', '旅行收藏家', '古董商人'];
+      const npcName = npcNames[Math.floor(Math.random() * npcNames.length)];
+      addNotification(`📢 ${npcName}出价 ${currentItem?.currentBid || 0} 金币！`, 'info');
+      saveGame();
+      return { success: true, npcBid: currentItem?.currentBid, npcName };
+    }
+    return { success: false };
+  }
+
+  function settleAuctionCurrentItem(): AuctionSettleResult | null {
+    if (!auction.value) return null;
+    const result = auction.value.settleCurrentItem();
+    if (result) {
+      if (result.won) {
+        addNotification(`🎉 恭喜！你以${result.finalPrice}金币拍得【${result.item.name}】`, 'success');
+      } else {
+        addNotification(`😔 【${result.item.name}】被别人拍走了，成交价${result.finalPrice}金币`, 'info');
+      }
+      saveGame();
+    }
+    return result;
+  }
+
+  function nextAuctionItem(): boolean {
+    if (!auction.value) return false;
+    const result = auction.value.nextItem();
+    saveGame();
+    return result;
+  }
+
+  function endAuction() {
+    if (!auction.value) return;
+    auction.value.endAuction();
+    addNotification('拍卖会结束了，感谢参与！', 'info');
+    saveGame();
+  }
+
+  function getAuctionState() {
+    return auction.value?.getState() ?? null;
+  }
+
+  function getCurrentAuctionItem() {
+    return auction.value?.getCurrentItem() ?? null;
+  }
+
+  function getEconomicIndex() {
+    return auction.value?.getEconomicBalanceFactor() ?? 1.0;
+  }
+
+  function getAuctionHistory() {
+    return auction.value?.getWonItems() ?? [];
+  }
+
+  function checkAndUpdateAuction() {
+    if (!auction.value || !mapGrid.value) return;
+    const dayOfWeek = ((mapGrid.value.getDay() - 1) % 7) + 1;
+    auction.value.checkAndUpdateAuction(dayOfWeek);
+    saveGame();
+  }
+
   return {
     gameState,
     mapGrid,
@@ -2379,6 +2610,23 @@ export const useGameStore = defineStore('game', () => {
     closeHireWorkerPanel,
     hireWorker,
     dismissWorker,
-    toggleWorkerTask
+    toggleWorkerTask,
+    auction,
+    showAuction,
+    openAuctionModal,
+    closeAuctionModal,
+    toggleAuctionModal,
+    startAuction,
+    placeBid,
+    placeQuickBid,
+    simulateAuctionNPBid,
+    settleAuctionCurrentItem,
+    nextAuctionItem,
+    endAuction,
+    getAuctionState,
+    getCurrentAuctionItem,
+    getEconomicIndex,
+    getAuctionHistory,
+    checkAndUpdateAuction
   };
 });

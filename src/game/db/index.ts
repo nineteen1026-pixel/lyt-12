@@ -1,6 +1,6 @@
 import { openDB, IDBPDatabase } from 'idb';
 import { DB_CONFIG, STORE_CONFIGS, INITIAL_GAME_STATE, INITIAL_REPUTATION, type DBStores } from './schema';
-import type { GameState, Plot, Animal, Pet, InventoryItem, Order, Building, GameStats, AchievementProgress, CodexEntry, SkillTreeState, VillagerRelationsState, FarmHireState } from '../types/game';
+import type { GameState, Plot, Animal, Pet, InventoryItem, Order, Building, GameStats, AchievementProgress, CodexEntry, SkillTreeState, VillagerRelationsState, FarmHireState, AuctionState } from '../types/game';
 import { GRID_WIDTH, GRID_HEIGHT, INITIAL_UNLOCKED } from '../types/game';
 import { INITIAL_STATS } from '../modules/Statistics';
 import { INITIAL_SKILL_TREE_STATE } from '../modules/SkillTree';
@@ -8,6 +8,7 @@ import { ACHIEVEMENTS } from '../data/achievements';
 import { CODEX_ENTRIES } from '../data/codex';
 import { createInitialVillagerRelations } from '../data/villagers';
 import { createInitialFarmHireState } from '../modules/FarmHire';
+import { createInitialAuctionState } from '../data/auction';
 
 class GameDatabase {
   private db: IDBPDatabase<DBStores> | null = null;
@@ -319,6 +320,22 @@ class GameDatabase {
     }
   }
 
+  async saveAuction(auction: AuctionState): Promise<void> {
+    const db = this.ensureDB();
+    const clone = JSON.parse(JSON.stringify(auction));
+    clone.id = 'main';
+    await db.put('auction', clone);
+  }
+
+  async getAuction(): Promise<AuctionState | undefined> {
+    const db = this.ensureDB();
+    try {
+      return await db.get('auction', 'main');
+    } catch (e) {
+      return undefined;
+    }
+  }
+
   async initializeNewGame(): Promise<{
     state: GameState;
     plots: Plot[];
@@ -333,6 +350,7 @@ class GameDatabase {
     skillTree: SkillTreeState;
     villagerRelations: VillagerRelationsState;
     farmHire: FarmHireState;
+    auction: AuctionState;
   }> {
     const now = Date.now();
     const state: GameState = {
@@ -399,6 +417,7 @@ class GameDatabase {
     const skillTree: SkillTreeState = { ...INITIAL_SKILL_TREE_STATE };
     const villagerRelations: VillagerRelationsState = createInitialVillagerRelations();
     const farmHire: FarmHireState = createInitialFarmHireState();
+    const auction: AuctionState = createInitialAuctionState();
 
     await this.saveGameState(state);
     await this.saveAllPlots(plots);
@@ -413,8 +432,9 @@ class GameDatabase {
     await this.saveSkillTree(skillTree);
     await this.saveVillagerRelations(villagerRelations);
     await this.saveFarmHire(farmHire);
+    await this.saveAuction(auction);
 
-    return { state, plots, animals, pets, inventory, orders, buildings, stats, achievements, codex, skillTree, villagerRelations, farmHire };
+    return { state, plots, animals, pets, inventory, orders, buildings, stats, achievements, codex, skillTree, villagerRelations, farmHire, auction };
   }
 
   async loadGame(): Promise<{
@@ -431,6 +451,7 @@ class GameDatabase {
     skillTree?: SkillTreeState;
     villagerRelations?: VillagerRelationsState;
     farmHire?: FarmHireState;
+    auction?: AuctionState;
   } | null> {
     const state = await this.getGameState();
     if (!state) {
@@ -480,8 +501,9 @@ class GameDatabase {
     const skillTree = await this.getSkillTree();
     const villagerRelations = await this.getVillagerRelations();
     const farmHire = await this.getFarmHire();
+    const auction = await this.getAuction();
 
-    return { state, plots, animals, pets, inventory, orders, buildings, stats, achievements, codex, skillTree, villagerRelations, farmHire };
+    return { state, plots, animals, pets, inventory, orders, buildings, stats, achievements, codex, skillTree, villagerRelations, farmHire, auction };
   }
 
   async saveCompleteGame(
@@ -497,7 +519,8 @@ class GameDatabase {
     codex?: CodexEntry[],
     skillTree?: SkillTreeState,
     villagerRelations?: VillagerRelationsState,
-    farmHire?: FarmHireState
+    farmHire?: FarmHireState,
+    auction?: AuctionState
   ): Promise<void> {
     await this.saveGameState(state);
     await this.saveAllPlots(plots);
@@ -524,6 +547,9 @@ class GameDatabase {
     }
     if (farmHire) {
       await this.saveFarmHire(farmHire);
+    }
+    if (auction) {
+      await this.saveAuction(auction);
     }
   }
 
