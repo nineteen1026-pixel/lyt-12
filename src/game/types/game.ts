@@ -709,3 +709,51 @@ export interface VillagerInteractionResult {
   unlockedOrder?: string;
   reward?: StorylineReward;
 }
+
+export type FarmWorkerTaskType = 'till' | 'water' | 'harvest';
+
+export interface FarmWorkerTask {
+  type: FarmWorkerTaskType;
+  enabled: boolean;
+}
+
+export interface HireWorkerSlot {
+  villagerId: string;
+  tasks: FarmWorkerTask[];
+  hiredAt: number;
+  dailyWage: number;
+  yieldShareRate: number;
+  active: boolean;
+}
+
+export interface FarmHireState {
+  slots: HireWorkerSlot[];
+  totalWagesPaid: number;
+  totalYieldShared: number;
+  lastWageSettleDay: number;
+  maxSlots: number;
+}
+
+export interface HireWorkerResult {
+  success: boolean;
+  message: string;
+  dailyWage?: number;
+  yieldShareRate?: number;
+}
+
+export interface DismissWorkerResult {
+  success: boolean;
+  message: string;
+}
+
+export interface WageSettleResult {
+  totalWage: number;
+  settledWorkers: string[];
+}
+
+export interface WorkerHarvestShare {
+  villagerId: string;
+  itemId: string;
+  quantity: number;
+  quality: QualityGrade;
+}

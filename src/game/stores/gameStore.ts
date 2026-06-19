@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed, toRaw } from 'vue';
-import type { GameState, Plot, Animal, Pet, PetType, InventoryItem, ToolType, Season, WeatherType, WeatherState, WeatherSeverity, WeatherWarning, Order, Building, BuildingType, BuildingConfig, GameStats, AchievementProgress, CodexEntry, QualityGrade, SkillTreeState, SkillEffectBonus, SkillNode, LevelUpResult, PetCompanionBonus, AffinityStage, DialogueResult, ExclusiveOrderTemplate } from '../types/game';
+import type { GameState, Plot, Animal, Pet, PetType, InventoryItem, ToolType, Season, WeatherType, WeatherState, WeatherSeverity, WeatherWarning, Order, Building, BuildingType, BuildingConfig, GameStats, AchievementProgress, CodexEntry, QualityGrade, SkillTreeState, SkillEffectBonus, SkillNode, LevelUpResult, PetCompanionBonus, AffinityStage, DialogueResult, ExclusiveOrderTemplate, FarmHireState, FarmWorkerTaskType } from '../types/game';
 import { QUALITY_PRICE_MULTIPLIER, QUALITY_NAMES, DAY_DURATION } from '../types/game';
 import { MapGrid } from '../modules/MapGrid';
 import { CropGrowth } from '../modules/CropGrowth';
@@ -19,6 +19,7 @@ import { CodexSystem, type DiscoveryResult } from '../modules/Codex';
 import { shareCardGenerator } from '../modules/ShareCard';
 import { getQualitySellPrice, getQualityStars } from '../modules/Quality';
 import { VillagerRelations, type DialogueAdvanceResult } from '../modules/VillagerRelations';
+import { FarmHire, createInitialFarmHireState } from '../modules/FarmHire';
 import { gameDB } from '../db';
 import { getItem } from '../data/items';
 import { getCropConfig } from '../data/crops';
@@ -32,6 +33,7 @@ import { rollFish, rollArtifact, FISH_COOLDOWN, DIG_COOLDOWN } from '../data/exp
 import type { MineSession, MineFloor, MineTile, MineExploreResult } from '../types/game';
 import { createMineSession, generateMineFloor, canMoveTo, getStaminaCost, isAdjacent, revealAround, addItemsToSession, getMineralConfig, MINE_ENTRY_COST, MINE_STAMINA_POTION_COST, MINE_STAMINA_POTION_AMOUNT, TOTAL_MINE_FLOORS } from '../data/mining';
 import { getExclusiveOrderById, getVillagerDetail, STAGE_NAMES, STAGE_COLORS } from '../data/villagers';
+import { getMaxHireSlots, TASK_DESCRIPTIONS, TASK_ICONS } from '../data/farmWorkers';
 
 export const useGameStore = defineStore('game', () => {
   const gameState = ref<GameState | null>(null);
@@ -49,6 +51,7 @@ export const useGameStore = defineStore('game', () => {
   const achievementSystem = ref<AchievementSystem | null>(null);
   const codexSystem = ref<CodexSystem | null>(null);
   const villagerRelations = ref<VillagerRelations | null>(null);
+  const farmHire = ref<FarmHire | null>(null);
   const selectedTool = ref<ToolType>(null);
   const selectedSeed = ref<string | null>(null);
   const selectedBuilding = ref<BuildingType | null>(null);
@@ -131,6 +134,12 @@ export const useGameStore = defineStore('game', () => {
   const highestAffinityStage = computed(() => villagerRelations.value?.getHighestStage() ?? 0);
   const storylinesCompletedCount = computed(() => statistics.value?.getStats().villagerStorylinesCompleted ?? 0);
   const exclusiveOrdersCompletedCount = computed(() => villagerRelations.value?.getExclusiveOrdersCompleted() ?? 0);
+  const farmHireState = computed<FarmHireState | null>(() => farmHire.value?.getState() ?? null);
+  const farmHireMaxSlots = computed(() => farmHire.value?.getMaxSlots() ?? 0);
+  const farmHireUsedSlots = computed(() => farmHire.value?.getUsedSlots() ?? 0);
+  const farmHireAvailableSlots = computed(() => farmHire.value?.getAvailableSlots() ?? 0);
+  const farmHireTotalDailyWage = computed(() => farmHire.value?.getTotalDailyWage() ?? 0);
+  const farmHireActiveSlots = computed(() => farmHire.value?.getActiveSlots() ?? []);
 
   const combinedBonusAccess = {
     getSkillBonus: (): SkillEffectBonus => {
@@ -145,6 +154,7 @@ export const useGameStore = defineStore('game', () => {
   const currentShareCardDataUrl = ref<string | null>(null);
   const showMiningModal = ref(false);
   const showPetPanel = ref(false);
+  const showHireWorker = ref(false);
   const currentMineSession = ref<MineSession | null>(null);
   const activeWeatherWarning = ref<WeatherWarning | null>(null);
 
@@ -269,6 +279,28 @@ export const useGameStore = defineStore('game', () => {
       );
 
       villagerRelations.value.subscribe(handleDialogueCompleted);
+
+      farmHire.value = new FarmHire(savedGame.farmHire ?? null);
+      farmHire.value.setMapAccess(mapGrid.value);
+      farmHire.value.setCropAccess(cropGrowth.value);
+      farmHire.value.setVillagerAccess(villagerRelations.value);
+      farmHire.value.setCoinAccess({
+        getCoins: () => shop.value?.getCoins() ?? 0,
+        spendCoins: (amount: number) => {
+          if (shop.value && shop.value.getCoins() >= amount) {
+            shop.value.spendCoins(amount);
+            if (gameState.value) gameState.value.coins = shop.value.getCoins();
+            return true;
+          }
+          return false;
+        }
+      });
+      farmHire.value.setInventoryAccess({
+        addItem: (itemId: string, quantity: number, quality?: QualityGrade) => {
+          return inventory.value?.addItem(itemId, quantity, quality) ?? false;
+        }
+      });
+      farmHire.value.updateReputationLevel(getReputationLevel(gameState.value!.reputation.score).level);
 
       if (cropGrowth.value) {
         cropGrowth.value.setSkillAccess(combinedBonusAccess);
@@ -481,6 +513,28 @@ export const useGameStore = defineStore('game', () => {
       );
 
       villagerRelations.value.subscribe(handleDialogueCompleted);
+
+      farmHire.value = new FarmHire(newGame.farmHire ?? null);
+      farmHire.value.setMapAccess(mapGrid.value);
+      farmHire.value.setCropAccess(cropGrowth.value);
+      farmHire.value.setVillagerAccess(villagerRelations.value);
+      farmHire.value.setCoinAccess({
+        getCoins: () => shop.value?.getCoins() ?? 0,
+        spendCoins: (amount: number) => {
+          if (shop.value && shop.value.getCoins() >= amount) {
+            shop.value.spendCoins(amount);
+            if (gameState.value) gameState.value.coins = shop.value.getCoins();
+            return true;
+          }
+          return false;
+        }
+      });
+      farmHire.value.setInventoryAccess({
+        addItem: (itemId: string, quantity: number, quality?: QualityGrade) => {
+          return inventory.value?.addItem(itemId, quantity, quality) ?? false;
+        }
+      });
+      farmHire.value.updateReputationLevel(getReputationLevel(gameState.value!.reputation.score).level);
 
       if (cropGrowth.value) {
         cropGrowth.value.setSkillAccess(combinedBonusAccess);
@@ -800,6 +854,7 @@ export const useGameStore = defineStore('game', () => {
     const rawAchievements = JSON.parse(JSON.stringify(toRaw(Object.values(achievementSystem.value.getAllProgress()))));
     const rawCodex = JSON.parse(JSON.stringify(toRaw(codexSystem.value.getAllEntries())));
     const rawVillagerRelations = JSON.parse(JSON.stringify(toRaw(villagerRelations.value.getState())));
+    const rawFarmHire = farmHire.value ? JSON.parse(JSON.stringify(toRaw(farmHire.value.getState()))) : undefined;
 
     await gameDB.saveCompleteGame(
       rawState,
@@ -813,7 +868,8 @@ export const useGameStore = defineStore('game', () => {
       rawAchievements,
       rawCodex,
       rawSkillTree,
-      rawVillagerRelations
+      rawVillagerRelations,
+      rawFarmHire
     );
   }
 
@@ -1739,6 +1795,27 @@ export const useGameStore = defineStore('game', () => {
     }
     dayTotalCrops.value = plantedCount;
     dayCropsWatered.value = wateredCount;
+
+    if (farmHire.value && gameState.value) {
+      farmHire.value.updateReputationLevel(getReputationLevel(gameState.value.reputation.score).level);
+      farmHire.value.refreshWorkerStats();
+
+      const currentDay = mapGrid.value.getDay();
+      const wageResult = farmHire.value.settleWages(currentDay);
+      if (wageResult.totalWage > 0) {
+        addNotification(`💰 雇工日薪结算：-${wageResult.totalWage}金币（${wageResult.settledWorkers.length}人）`, 'info');
+      } else if (wageResult.settledWorkers.length === 0 && farmHire.value.getUsedSlots() > 0) {
+        addNotification('💰 金币不足支付雇工工资，雇工已自动解雇！', 'error');
+      }
+
+      const harvestShares = farmHire.value.executeWorkerTasks();
+      if (harvestShares.length > 0) {
+        for (const share of harvestShares) {
+          const item = getItem(share.itemId);
+          addNotification(`🌾 雇工${getVillagerDetail(share.villagerId)?.name || '村民'}收获了${share.quantity}个${item?.name || '作物'}（分成部分）`, 'info');
+        }
+      }
+    }
   }
 
   function openMiningModal() {
@@ -2084,6 +2161,55 @@ export const useGameStore = defineStore('game', () => {
     return villagerRelations.value?.resetVillagerDialogue(villagerId) ?? false;
   }
 
+  function openHireWorkerPanel() {
+    showHireWorker.value = true;
+  }
+
+  function closeHireWorkerPanel() {
+    showHireWorker.value = false;
+  }
+
+  function hireWorker(villagerId: string): { success: boolean; message: string } {
+    if (!farmHire.value) {
+      return { success: false, message: '系统未初始化' };
+    }
+    const result = farmHire.value.hireWorker(villagerId);
+    if (result.success) {
+      const detail = getVillagerDetail(villagerId);
+      addNotification(`👷 雇佣${detail?.name || '村民'}成功！${result.message}`, 'success');
+      saveGame();
+    } else {
+      addNotification(result.message, 'error');
+    }
+    return result;
+  }
+
+  function dismissWorker(villagerId: string): { success: boolean; message: string } {
+    if (!farmHire.value) {
+      return { success: false, message: '系统未初始化' };
+    }
+    const result = farmHire.value.dismissWorker(villagerId);
+    if (result.success) {
+      const detail = getVillagerDetail(villagerId);
+      addNotification(`👷 已解雇${detail?.name || '村民'}`, 'info');
+      saveGame();
+    } else {
+      addNotification(result.message, 'error');
+    }
+    return result;
+  }
+
+  function toggleWorkerTask(villagerId: string, taskType: FarmWorkerTaskType): { success: boolean; enabled: boolean } {
+    if (!farmHire.value) {
+      return { success: false, enabled: false };
+    }
+    const result = farmHire.value.toggleTask(villagerId, taskType);
+    if (result.success) {
+      saveGame();
+    }
+    return result;
+  }
+
   return {
     gameState,
     mapGrid,
@@ -2239,6 +2365,19 @@ export const useGameStore = defineStore('game', () => {
     getCurrentDialogue,
     advanceVillagerDialogue,
     giveGiftToVillager,
-    resetVillagerDialogue
+    resetVillagerDialogue,
+    showHireWorker,
+    farmHire,
+    farmHireState,
+    farmHireMaxSlots,
+    farmHireUsedSlots,
+    farmHireAvailableSlots,
+    farmHireTotalDailyWage,
+    farmHireActiveSlots,
+    openHireWorkerPanel,
+    closeHireWorkerPanel,
+    hireWorker,
+    dismissWorker,
+    toggleWorkerTask
   };
 });

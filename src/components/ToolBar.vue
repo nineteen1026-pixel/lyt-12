@@ -196,6 +196,21 @@ const toggleBuildingsPanel = () => {
       <span class="font-pixel text-[8px] text-amber-100 mt-1">矿洞</span>
     </div>
 
+    <div 
+      class="tool-btn flex flex-col items-center justify-center w-16 h-16 bg-gradient-to-b from-orange-600 to-orange-800 border-3 border-orange-950 cursor-pointer transition-all hover:from-orange-500 hover:to-orange-700 hover:scale-105 active:scale-95 relative shadow-lg"
+      :class="{ 'opacity-50': gameStore.farmHireMaxSlots === 0 }"
+      @click="gameStore.openHireWorkerPanel()"
+    >
+      <span class="text-2xl">👷</span>
+      <span class="font-pixel text-[8px] text-orange-100 mt-1">雇工</span>
+      <span 
+        v-if="gameStore.farmHireUsedSlots > 0"
+        class="absolute -top-1 -right-1 w-5 h-5 bg-orange-400 text-white font-pixel text-[10px] rounded-full flex items-center justify-center border-2 border-farm-wood-dark"
+      >
+        {{ gameStore.farmHireUsedSlots }}
+      </span>
+    </div>
+
     <div class="w-px h-12 bg-farm-wood-dark mx-2"></div>
 
     <div 

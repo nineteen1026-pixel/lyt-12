@@ -1,12 +1,13 @@
 import { openDB, IDBPDatabase } from 'idb';
 import { DB_CONFIG, STORE_CONFIGS, INITIAL_GAME_STATE, INITIAL_REPUTATION, type DBStores } from './schema';
-import type { GameState, Plot, Animal, Pet, InventoryItem, Order, Building, GameStats, AchievementProgress, CodexEntry, SkillTreeState, VillagerRelationsState } from '../types/game';
+import type { GameState, Plot, Animal, Pet, InventoryItem, Order, Building, GameStats, AchievementProgress, CodexEntry, SkillTreeState, VillagerRelationsState, FarmHireState } from '../types/game';
 import { GRID_WIDTH, GRID_HEIGHT, INITIAL_UNLOCKED } from '../types/game';
 import { INITIAL_STATS } from '../modules/Statistics';
 import { INITIAL_SKILL_TREE_STATE } from '../modules/SkillTree';
 import { ACHIEVEMENTS } from '../data/achievements';
 import { CODEX_ENTRIES } from '../data/codex';
 import { createInitialVillagerRelations } from '../data/villagers';
+import { createInitialFarmHireState } from '../modules/FarmHire';
 
 class GameDatabase {
   private db: IDBPDatabase<DBStores> | null = null;
@@ -302,6 +303,22 @@ class GameDatabase {
     }
   }
 
+  async saveFarmHire(farmHire: FarmHireState): Promise<void> {
+    const db = this.ensureDB();
+    const clone = JSON.parse(JSON.stringify(farmHire));
+    clone.id = 'main';
+    await db.put('farmHire', clone);
+  }
+
+  async getFarmHire(): Promise<FarmHireState | undefined> {
+    const db = this.ensureDB();
+    try {
+      return await db.get('farmHire', 'main');
+    } catch (e) {
+      return undefined;
+    }
+  }
+
   async initializeNewGame(): Promise<{
     state: GameState;
     plots: Plot[];
@@ -315,6 +332,7 @@ class GameDatabase {
     codex: CodexEntry[];
     skillTree: SkillTreeState;
     villagerRelations: VillagerRelationsState;
+    farmHire: FarmHireState;
   }> {
     const now = Date.now();
     const state: GameState = {
@@ -380,6 +398,7 @@ class GameDatabase {
     const codex: CodexEntry[] = CODEX_ENTRIES.map(e => ({ ...e }));
     const skillTree: SkillTreeState = { ...INITIAL_SKILL_TREE_STATE };
     const villagerRelations: VillagerRelationsState = createInitialVillagerRelations();
+    const farmHire: FarmHireState = createInitialFarmHireState();
 
     await this.saveGameState(state);
     await this.saveAllPlots(plots);
@@ -393,8 +412,9 @@ class GameDatabase {
     await this.saveAllCodexEntries(codex);
     await this.saveSkillTree(skillTree);
     await this.saveVillagerRelations(villagerRelations);
+    await this.saveFarmHire(farmHire);
 
-    return { state, plots, animals, pets, inventory, orders, buildings, stats, achievements, codex, skillTree, villagerRelations };
+    return { state, plots, animals, pets, inventory, orders, buildings, stats, achievements, codex, skillTree, villagerRelations, farmHire };
   }
 
   async loadGame(): Promise<{
@@ -410,6 +430,7 @@ class GameDatabase {
     codex?: CodexEntry[];
     skillTree?: SkillTreeState;
     villagerRelations?: VillagerRelationsState;
+    farmHire?: FarmHireState;
   } | null> {
     const state = await this.getGameState();
     if (!state) {
@@ -458,8 +479,9 @@ class GameDatabase {
     const codex = await this.getAllCodexEntries();
     const skillTree = await this.getSkillTree();
     const villagerRelations = await this.getVillagerRelations();
+    const farmHire = await this.getFarmHire();
 
-    return { state, plots, animals, pets, inventory, orders, buildings, stats, achievements, codex, skillTree, villagerRelations };
+    return { state, plots, animals, pets, inventory, orders, buildings, stats, achievements, codex, skillTree, villagerRelations, farmHire };
   }
 
   async saveCompleteGame(
@@ -474,7 +496,8 @@ class GameDatabase {
     achievements?: AchievementProgress[],
     codex?: CodexEntry[],
     skillTree?: SkillTreeState,
-    villagerRelations?: VillagerRelationsState
+    villagerRelations?: VillagerRelationsState,
+    farmHire?: FarmHireState
   ): Promise<void> {
     await this.saveGameState(state);
     await this.saveAllPlots(plots);
@@ -498,6 +521,9 @@ class GameDatabase {
     }
     if (villagerRelations) {
       await this.saveVillagerRelations(villagerRelations);
+    }
+    if (farmHire) {
+      await this.saveFarmHire(farmHire);
     }
   }
 
