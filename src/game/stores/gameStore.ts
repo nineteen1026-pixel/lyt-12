@@ -255,10 +255,11 @@ export const useGameStore = defineStore('game', () => {
 
       const statisticsAccess_vr = {
         recordAffinityGained: (amount: number) => statistics.value?.recordAffinityGained(amount),
-        recordStageUp: (villagerId: string, newStage: AffinityStage) => statistics.value?.recordStageUp(villagerId, newStage),
+        recordStageUp: (villagerId: string, newStage: AffinityStage, oldStage: AffinityStage) => statistics.value?.recordStageUp(villagerId, newStage, oldStage),
         recordDialogueCompleted: (villagerId: string) => statistics.value?.recordDialogueCompleted(villagerId),
         recordExclusiveOrderCompleted: (villagerId: string, orderId: string) => statistics.value?.recordExclusiveOrderCompleted(villagerId, orderId),
-        recordGiftGiven: (villagerId: string, itemId: string) => statistics.value?.recordGiftGiven(villagerId, itemId)
+        recordGiftGiven: (villagerId: string, itemId: string) => statistics.value?.recordGiftGiven(villagerId, itemId),
+        recordVillagerStorylineCompleted: (villagerId: string) => statistics.value?.recordVillagerStorylineCompleted(villagerId)
       };
 
       villagerRelations.value = new VillagerRelations(
@@ -466,10 +467,11 @@ export const useGameStore = defineStore('game', () => {
 
       const statisticsAccess_vr_new = {
         recordAffinityGained: (amount: number) => statistics.value?.recordAffinityGained(amount),
-        recordStageUp: (villagerId: string, newStage: AffinityStage) => statistics.value?.recordStageUp(villagerId, newStage),
+        recordStageUp: (villagerId: string, newStage: AffinityStage, oldStage: AffinityStage) => statistics.value?.recordStageUp(villagerId, newStage, oldStage),
         recordDialogueCompleted: (villagerId: string) => statistics.value?.recordDialogueCompleted(villagerId),
         recordExclusiveOrderCompleted: (villagerId: string, orderId: string) => statistics.value?.recordExclusiveOrderCompleted(villagerId, orderId),
-        recordGiftGiven: (villagerId: string, itemId: string) => statistics.value?.recordGiftGiven(villagerId, itemId)
+        recordGiftGiven: (villagerId: string, itemId: string) => statistics.value?.recordGiftGiven(villagerId, itemId),
+        recordVillagerStorylineCompleted: (villagerId: string) => statistics.value?.recordVillagerStorylineCompleted(villagerId)
       };
 
       villagerRelations.value = new VillagerRelations(
@@ -580,7 +582,7 @@ export const useGameStore = defineStore('game', () => {
     }
     for (const codexId of result.codexTriggers) {
       if (codexSystem.value) {
-        codexSystem.value.discoverVillager(codexId.replace('villager_', ''));
+        codexSystem.value.discoverEntry(codexId);
       }
     }
     if (achievementSystem.value && statistics.value) {
@@ -595,9 +597,9 @@ export const useGameStore = defineStore('game', () => {
     if (result.achievementTriggers.length > 0) {
       for (const achId of result.achievementTriggers) {
         if (achievementSystem.value && !achievementSystem.value.isUnlocked(achId)) {
-          const ach = getAchievementById(achId);
-          if (ach) {
-            handleAchievementUnlocked({ achievement: ach, reward: ach.reward });
+          const unlockResult = achievementSystem.value.forceUnlock(achId);
+          if (unlockResult) {
+            handleAchievementUnlocked(unlockResult);
           }
         }
       }

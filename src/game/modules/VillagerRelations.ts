@@ -38,10 +38,11 @@ export interface RewardAccess {
 
 export interface StatisticsAccess {
   recordAffinityGained(amount: number): void;
-  recordStageUp(villagerId: string, newStage: AffinityStage): void;
+  recordStageUp(villagerId: string, newStage: AffinityStage, oldStage: AffinityStage): void;
   recordDialogueCompleted(villagerId: string): void;
   recordExclusiveOrderCompleted(villagerId: string, orderId: string): void;
   recordGiftGiven(villagerId: string, itemId: string): void;
+  recordVillagerStorylineCompleted(villagerId: string): void;
 }
 
 export interface DialogueAdvanceResult {
@@ -171,7 +172,7 @@ export class VillagerRelations {
       stageAdvanced = true;
       this.handleStageAdvance(villagerId, oldStage, newStage);
       if (this.statisticsAccess) {
-        this.statisticsAccess.recordStageUp(villagerId, newStage);
+        this.statisticsAccess.recordStageUp(villagerId, newStage, oldStage);
       }
     }
 
@@ -206,6 +207,9 @@ export class VillagerRelations {
 
     if (newStage === 5) {
       this.state.storylinesCompleted++;
+      if (this.statisticsAccess) {
+        this.statisticsAccess.recordVillagerStorylineCompleted(villagerId);
+      }
     }
   }
 

@@ -505,15 +505,13 @@ export class Statistics {
     return expGain;
   }
 
-  recordStageUp(villagerId: string, newStage: AffinityStage) {
-    for (let s = 0; s <= 5; s++) {
-      if (this.stats.villagersAtStage[s as AffinityStage] > 0 && s < newStage) {
-        this.stats.villagersAtStage[s as AffinityStage] = Math.max(0, this.stats.villagersAtStage[s as AffinityStage] - 1);
-      }
+  recordStageUp(villagerId: string, newStage: AffinityStage, oldStage: AffinityStage) {
+    if (this.stats.villagersAtStage[oldStage] > 0) {
+      this.stats.villagersAtStage[oldStage]--;
     }
     this.stats.villagersAtStage[newStage] = (this.stats.villagersAtStage[newStage] || 0) + 1;
     this.stats.villagersWithMaxAffinity = this.stats.villagersAtStage[5];
-    this.notify(this.createEvent('stage_up', { villagerId, newStage }));
+    this.notify(this.createEvent('stage_up', { villagerId, newStage, oldStage }));
   }
 
   recordDialogueCompleted(villagerId: string) {

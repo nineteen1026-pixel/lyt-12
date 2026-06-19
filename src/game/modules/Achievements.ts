@@ -76,6 +76,27 @@ export class AchievementSystem {
     return this.progress[achievementId]?.unlocked ?? false;
   }
 
+  forceUnlock(achievementId: string): AchievementUnlockResult | null {
+    if (this.progress[achievementId]?.unlocked) return null;
+    const achievement = ACHIEVEMENTS.find(a => a.id === achievementId);
+    if (!achievement) return null;
+
+    this.progress[achievementId] = {
+      ...this.progress[achievementId],
+      unlocked: true,
+      unlockedAt: Date.now(),
+      progress: 100
+    };
+    this.unlockedCount++;
+
+    const result: AchievementUnlockResult = {
+      achievement,
+      reward: achievement.reward
+    };
+    this.notify(result);
+    return result;
+  }
+
   checkAchievements(stats: GameStats, codexCompletion?: number): AchievementUnlockResult[] {
     const newlyUnlocked: AchievementUnlockResult[] = [];
 

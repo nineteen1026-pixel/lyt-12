@@ -99,10 +99,11 @@ function createBuildingCodexEntries(): CodexEntry[] {
 }
 
 function createVillagerCodexEntries(): CodexEntry[] {
-  return VILLAGERS.map((villager, index) => {
+  const entries: CodexEntry[] = [];
+  VILLAGERS.forEach((villager, index) => {
     const detail = VILLAGER_DETAILS[villager.id];
     const rarity = index < 3 ? 'common' : index < 6 ? 'uncommon' : 'rare';
-    return {
+    entries.push({
       id: `villager_${villager.id}`,
       name: detail?.name || villager.name,
       description: detail ? `${detail.occupation} · ${detail.personality}\n${detail.backstory}` : `一位友善的村民，会经常来农场下订单`,
@@ -112,8 +113,31 @@ function createVillagerCodexEntries(): CodexEntry[] {
       discovered: false,
       count: 0,
       hint: detail ? `喜好: ${detail.likes.join('、')} | 生日: ${detail.birthday || '未知'}\n好感度阶段: ${STAGE_NAMES[0]}→${STAGE_NAMES[5]}` : '完成订单时会遇到不同的村民'
-    };
+    });
+    entries.push({
+      id: `villager_${villager.id}_story`,
+      name: `${detail?.name || villager.name}的故事`,
+      description: detail ? `${detail.name}向你敞开心扉，分享了深藏的故事。` : `这位村民向你讲述了珍贵的人生经历。`,
+      icon: '📖',
+      category: 'villager' as const,
+      rarity: 'rare',
+      discovered: false,
+      count: 0,
+      hint: `将${detail?.name || '村民'}的好感度提升至「好友」阶段`
+    });
+    entries.push({
+      id: `villager_${villager.id}_soulmate`,
+      name: `${detail?.name || villager.name}的知己`,
+      description: detail ? `你与${detail.name}成为了知己，这份情谊将永远铭刻在心。` : `你与这位村民成为了至交知己。`,
+      icon: '💫',
+      category: 'villager' as const,
+      rarity: 'epic',
+      discovered: false,
+      count: 0,
+      hint: `将${detail?.name || '村民'}的好感度提升至最高「知己」阶段`
+    });
   });
+  return entries;
 }
 
 function createFishCodexEntries(): CodexEntry[] {
