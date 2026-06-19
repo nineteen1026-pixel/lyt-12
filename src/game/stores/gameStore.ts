@@ -569,7 +569,7 @@ export const useGameStore = defineStore('game', () => {
     if (result.stageAdvanced) {
       const stageName = STAGE_NAMES[result.newStage];
       const color = STAGE_COLORS[result.newStage];
-      addNotification(`💖 与${detail?.name || '村民'}好感度提升至【${stageName}！`, 'success');
+      addNotification(`💖 与${detail?.name || '村民'}好感度提升至【${stageName}】！`, 'success');
     }
     for (const orderId of result.unlockedOrders) {
       const template = getExclusiveOrderById(orderId);

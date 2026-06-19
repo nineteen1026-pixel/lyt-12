@@ -558,7 +558,8 @@ export function createInitialVillagerRelation(villagerId: string): VillagerRelat
     claimedRewardIds: [],
     ordersCompletedFor: 0,
     giftsGiven: 0,
-    lastInteractTime: 0
+    lastInteractTime: 0,
+    storylineCompleted: false
   };
 }
 

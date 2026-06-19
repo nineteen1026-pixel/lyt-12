@@ -672,6 +672,7 @@ export interface VillagerRelationState {
   ordersCompletedFor: number;
   giftsGiven: number;
   lastInteractTime: number;
+  storylineCompleted: boolean;
 }
 
 export interface VillagerRelationsState {

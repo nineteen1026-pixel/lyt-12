@@ -152,9 +152,9 @@ export class VillagerRelations {
     return !!this.getCurrentDialogue(villagerId);
   }
 
-  addAffinity(villagerId: string, amount: number): { stageAdvanced: boolean; newStage: AffinityStage } {
+  addAffinity(villagerId: string, amount: number): { stageAdvanced: boolean; newStage: AffinityStage; stageCodexTriggers: string[]; stageAchievementTriggers: string[] } {
     const relation = this.state.relations[villagerId];
-    if (!relation) return { stageAdvanced: false, newStage: 0 };
+    if (!relation) return { stageAdvanced: false, newStage: 0, stageCodexTriggers: [], stageAchievementTriggers: [] };
 
     const oldStage = relation.stage;
     relation.affinity = Math.max(0, relation.affinity + amount);
@@ -167,10 +167,14 @@ export class VillagerRelations {
 
     this.state.totalAffinity += amount;
     let stageAdvanced = false;
+    const stageCodexTriggers: string[] = [];
+    const stageAchievementTriggers: string[] = [];
 
     if (newStage > oldStage) {
       stageAdvanced = true;
-      this.handleStageAdvance(villagerId, oldStage, newStage);
+      const triggers = this.handleStageAdvance(villagerId, oldStage, newStage);
+      stageCodexTriggers.push(...triggers.codexTriggers);
+      stageAchievementTriggers.push(...triggers.achievementTriggers);
       if (this.statisticsAccess) {
         this.statisticsAccess.recordStageUp(villagerId, newStage, oldStage);
       }
@@ -181,12 +185,14 @@ export class VillagerRelations {
     }
 
     relation.lastInteractTime = Date.now();
-    return { stageAdvanced, newStage };
+    return { stageAdvanced, newStage, stageCodexTriggers, stageAchievementTriggers };
   }
 
-  private handleStageAdvance(villagerId: string, oldStage: AffinityStage, newStage: AffinityStage): void {
+  private handleStageAdvance(villagerId: string, oldStage: AffinityStage, newStage: AffinityStage): { codexTriggers: string[]; achievementTriggers: string[] } {
     const relation = this.state.relations[villagerId];
-    if (!relation) return;
+    const codexTriggers: string[] = [];
+    const achievementTriggers: string[] = [];
+    if (!relation) return { codexTriggers, achievementTriggers };
 
     for (let s = oldStage + 1; s <= newStage; s++) {
       const startNode = getStartDialogueForStage(villagerId, s as AffinityStage);
@@ -203,14 +209,19 @@ export class VillagerRelations {
           relation.unlockedExclusiveOrderIds.push(order.id);
         }
       }
+      if (s === 3) {
+        codexTriggers.push(`villager_${villagerId}_story`);
+      }
+      if (s === 5) {
+        codexTriggers.push(`villager_${villagerId}_soulmate`);
+      }
     }
 
     if (newStage === 5) {
       this.state.storylinesCompleted++;
-      if (this.statisticsAccess) {
-        this.statisticsAccess.recordVillagerStorylineCompleted(villagerId);
-      }
     }
+
+    return { codexTriggers, achievementTriggers };
   }
 
   advanceDialogue(
@@ -219,7 +230,7 @@ export class VillagerRelations {
   ): DialogueAdvanceResult {
     const relation = this.state.relations[villagerId];
     if (!relation) {
-      return {
+      const empty: DialogueAdvanceResult = {
         nextNode: null,
         affinityDelta: 0,
         ended: true,
@@ -231,11 +242,13 @@ export class VillagerRelations {
         achievementTriggers: [],
         claimedReward: null
       };
+      this.notifyDialogueResult(villagerId, null, empty);
+      return empty;
     }
 
     const map = this.dialogueMaps[villagerId];
     if (!map) {
-      return {
+      const empty: DialogueAdvanceResult = {
         nextNode: null,
         affinityDelta: 0,
         ended: true,
@@ -247,11 +260,13 @@ export class VillagerRelations {
         achievementTriggers: [],
         claimedReward: null
       };
+      this.notifyDialogueResult(villagerId, null, empty);
+      return empty;
     }
 
     let currentNode: DialogueNode | null = map.get(relation.currentDialogueId) || null;
     if (!currentNode) {
-      return {
+      const empty: DialogueAdvanceResult = {
         nextNode: null,
         affinityDelta: 0,
         ended: true,
@@ -263,6 +278,8 @@ export class VillagerRelations {
         achievementTriggers: [],
         claimedReward: null
       };
+      this.notifyDialogueResult(villagerId, null, empty);
+      return empty;
     }
 
     let totalAffinityDelta = 0;
@@ -334,6 +351,16 @@ export class VillagerRelations {
       if (currentNode.isEnding) {
         relation.currentDialogueId = currentNode.id;
         const advanceResult = this.addAffinity(villagerId, totalAffinityDelta);
+        codexTriggers.push(...advanceResult.stageCodexTriggers);
+        achievementTriggers.push(...advanceResult.stageAchievementTriggers);
+
+        const isStage5Ending = currentNode.id.endsWith('_s5_end');
+        if (isStage5Ending && !relation.storylineCompleted) {
+          relation.storylineCompleted = true;
+          if (this.statisticsAccess) {
+            this.statisticsAccess.recordVillagerStorylineCompleted(villagerId);
+          }
+        }
 
         const result: DialogueAdvanceResult = {
           nextNode: currentNode,
@@ -356,7 +383,10 @@ export class VillagerRelations {
 
       if (currentNode.choices && currentNode.choices.length > 0) {
         const advanceResult = this.addAffinity(villagerId, totalAffinityDelta);
-        return {
+        codexTriggers.push(...advanceResult.stageCodexTriggers);
+        achievementTriggers.push(...advanceResult.stageAchievementTriggers);
+
+        const result: DialogueAdvanceResult = {
           nextNode: currentNode,
           affinityDelta: totalAffinityDelta,
           ended: false,
@@ -368,6 +398,9 @@ export class VillagerRelations {
           achievementTriggers,
           claimedReward
         };
+
+        this.notifyDialogueResult(villagerId, currentNode, result);
+        return result;
       }
 
       if (currentNode.autoNext) {
@@ -385,8 +418,10 @@ export class VillagerRelations {
     }
 
     const finalAdvanceResult = this.addAffinity(villagerId, totalAffinityDelta);
+    codexTriggers.push(...finalAdvanceResult.stageCodexTriggers);
+    achievementTriggers.push(...finalAdvanceResult.stageAchievementTriggers);
 
-    return {
+    const finalResult: DialogueAdvanceResult = {
       nextNode: null,
       affinityDelta: totalAffinityDelta,
       ended: true,
@@ -398,16 +433,19 @@ export class VillagerRelations {
       achievementTriggers,
       claimedReward
     };
+
+    this.notifyDialogueResult(villagerId, null, finalResult);
+    return finalResult;
   }
 
   private notifyDialogueResult(
     villagerId: string,
-    finalNode: DialogueNode,
+    finalNode: DialogueNode | null,
     result: DialogueAdvanceResult
   ): void {
     const dialogueResult: DialogueResult = {
       villagerId,
-      nodeId: finalNode.id,
+      nodeId: finalNode?.id || '',
       affinityGained: result.affinityDelta,
       stageAdvanced: result.stageAdvanced,
       newStage: result.newStage,
