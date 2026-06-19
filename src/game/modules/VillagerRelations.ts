@@ -74,6 +74,31 @@ export class VillagerRelations {
     this.rewardAccess = rewardAccess;
     this.statisticsAccess = statisticsAccess;
     this.initializeDialogueMaps();
+    this.migrateOldSave();
+  }
+
+  private migrateOldSave(): void {
+    let migratedCount = 0;
+    for (const relation of Object.values(this.state.relations)) {
+      if (relation.storylineCompleted === undefined) {
+        const hasEnding = relation.completedDialogueIds.some(id => id.endsWith('_s5_end'));
+        (relation as any).storylineCompleted = hasEnding;
+        if (hasEnding) {
+          migratedCount++;
+        }
+      }
+    }
+    const actualCount = Object.values(this.state.relations).filter(r => r.storylineCompleted).length;
+    if (this.state.storylinesCompleted !== actualCount) {
+      this.state.storylinesCompleted = actualCount;
+    }
+    if (migratedCount > 0 && this.statisticsAccess) {
+      for (const [vid, relation] of Object.entries(this.state.relations)) {
+        if (relation.storylineCompleted) {
+          this.statisticsAccess.recordVillagerStorylineCompleted(vid);
+        }
+      }
+    }
   }
 
   private initializeDialogueMaps(): void {
@@ -211,9 +236,6 @@ export class VillagerRelations {
       }
       if (s === 3) {
         codexTriggers.push(`villager_${villagerId}_story`);
-      }
-      if (s === 5) {
-        codexTriggers.push(`villager_${villagerId}_soulmate`);
       }
     }
 
@@ -357,6 +379,7 @@ export class VillagerRelations {
           if (this.statisticsAccess) {
             this.statisticsAccess.recordVillagerStorylineCompleted(villagerId);
           }
+          codexTriggers.push(`villager_${villagerId}_soulmate`);
         }
 
         const result: DialogueAdvanceResult = {

@@ -129,7 +129,7 @@ export const useGameStore = defineStore('game', () => {
   const allVillagersInfo = computed(() => villagerRelations.value?.getAllVillagersInfo() ?? []);
   const totalAffinity = computed(() => villagerRelations.value?.getTotalAffinity() ?? 0);
   const highestAffinityStage = computed(() => villagerRelations.value?.getHighestStage() ?? 0);
-  const storylinesCompletedCount = computed(() => villagerRelations.value?.getStorylinesCompleted() ?? 0);
+  const storylinesCompletedCount = computed(() => statistics.value?.getStats().villagerStorylinesCompleted ?? 0);
   const exclusiveOrdersCompletedCount = computed(() => villagerRelations.value?.getExclusiveOrdersCompleted() ?? 0);
 
   const combinedBonusAccess = {

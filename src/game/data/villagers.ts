@@ -217,7 +217,7 @@ function generateDialoguesForVillager1(): DialogueNode[] {
       { text: '李大叔！我...我一定不辜负您！', affinityDelta: 10, nextNodeId: `${vid}_s5_good`, unlockRewardId: `${vid}_s5_r1` },
       { text: '（热泪盈眶，紧紧握住钥匙）', affinityDelta: 10, nextNodeId: `${vid}_s5_good`, unlockRewardId: `${vid}_s5_r1` }
     ]},
-    { id: `${vid}_s5_good`, stage: 5, speaker: 'villager', text: '孩子，土地是不会骗人的。你对它用心，它就会给你最好的回报。去吧，去创造属于你的传奇！', autoNext: `${vid}_s5_end`, unlockOrderId: `${vid}_ex_5`, triggerAchievementId: 'soulmate', triggerCodexId: `villager_${vid}_soulmate` },
+    { id: `${vid}_s5_good`, stage: 5, speaker: 'villager', text: '孩子，土地是不会骗人的。你对它用心，它就会给你最好的回报。去吧，去创造属于你的传奇！', autoNext: `${vid}_s5_end`, unlockOrderId: `${vid}_ex_5`, triggerAchievementId: 'soulmate' },
     { id: `${vid}_s5_end`, stage: 5, speaker: 'narrator', text: '你与李大叔的故事，成为了村里流传的佳话。这份情谊，将永远铭刻在心中。', isEnding: true }
   ];
 }
@@ -279,7 +279,7 @@ function generateDialoguesForVillager2(): DialogueNode[] {
       { text: '王奶奶！这太贵重了...', affinityDelta: 10, nextNodeId: `${vid}_s5_good`, unlockRewardId: `${vid}_s5_r1` },
       { text: '（恭敬地接过食谱）', affinityDelta: 10, nextNodeId: `${vid}_s5_good`, unlockRewardId: `${vid}_s5_r1` }
     ]},
-    { id: `${vid}_s5_good`, stage: 5, speaker: 'villager', text: '这是我王家三代人的心血。我没有后代，你就是我的亲孙子（孙女）。希望你能用它，给更多人带来幸福。', autoNext: `${vid}_s5_end`, unlockOrderId: `${vid}_ex_5`, triggerAchievementId: 'soulmate', triggerCodexId: `villager_${vid}_soulmate` },
+    { id: `${vid}_s5_good`, stage: 5, speaker: 'villager', text: '这是我王家三代人的心血。我没有后代，你就是我的亲孙子（孙女）。希望你能用它，给更多人带来幸福。', autoNext: `${vid}_s5_end`, unlockOrderId: `${vid}_ex_5`, triggerAchievementId: 'soulmate' },
     { id: `${vid}_s5_end`, stage: 5, speaker: 'narrator', text: '你手捧着沉甸甸的食谱，也接过了一份温暖的传承。', isEnding: true }
   ];
 }
@@ -340,7 +340,7 @@ function generateDialoguesForVillager3(): DialogueNode[] {
       { text: '（坚定地走上台）', affinityDelta: 10, nextNodeId: `${vid}_s5_good`, unlockRewardId: `${vid}_s5_r1` },
       { text: '（在掌声中与她并肩而立）', affinityDelta: 10, nextNodeId: `${vid}_s5_good`, unlockRewardId: `${vid}_s5_r1` }
     ]},
-    { id: `${vid}_s5_good`, stage: 5, speaker: 'villager', text: '从今以后，让我们一起用科学的力量，让家乡变得更好！这是我为我们的合作定制的"未来农场"计划，一起实现它吧！', autoNext: `${vid}_s5_end`, unlockOrderId: `${vid}_ex_5`, triggerAchievementId: 'soulmate', triggerCodexId: `villager_${vid}_soulmate` },
+    { id: `${vid}_s5_good`, stage: 5, speaker: 'villager', text: '从今以后，让我们一起用科学的力量，让家乡变得更好！这是我为我们的合作定制的"未来农场"计划，一起实现它吧！', autoNext: `${vid}_s5_end`, unlockOrderId: `${vid}_ex_5`, triggerAchievementId: 'soulmate' },
     { id: `${vid}_s5_end`, stage: 5, speaker: 'narrator', text: '在共同的梦想面前，你们成为了最默契的搭档。未来的路，将一起走下去。', isEnding: true }
   ];
 }
@@ -400,7 +400,7 @@ function generateBasicDialogues(vid: string, personality: string): DialogueNode[
       { text: '（紧紧握住对方的手）我也是。', affinityDelta: 10, nextNodeId: `${vid}_s5_good`, unlockRewardId: `${vid}_s5_r1` },
       { text: '（眼眶湿润）谢谢你。', affinityDelta: 10, nextNodeId: `${vid}_s5_good`, unlockRewardId: `${vid}_s5_r1` }
     ]},
-    { id: `${vid}_s5_good`, stage: 5, speaker: 'villager', text: '这是我最珍贵的东西，现在它属于你了。无论发生什么，我们永远都是最好的朋友！', autoNext: `${vid}_s5_end`, unlockOrderId: `${vid}_ex_5`, triggerAchievementId: 'soulmate', triggerCodexId: `villager_${vid}_soulmate` },
+    { id: `${vid}_s5_good`, stage: 5, speaker: 'villager', text: '这是我最珍贵的东西，现在它属于你了。无论发生什么，我们永远都是最好的朋友！', autoNext: `${vid}_s5_end`, unlockOrderId: `${vid}_ex_5`, triggerAchievementId: 'soulmate' },
     { id: `${vid}_s5_end`, stage: 5, speaker: 'narrator', text: '人生得一知己，足矣。这份情谊，将伴随你们一生。', isEnding: true }
   ];
 }
