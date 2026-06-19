@@ -1804,8 +1804,9 @@ export const useGameStore = defineStore('game', () => {
       const wageResult = farmHire.value.settleWages(currentDay);
       if (wageResult.totalWage > 0) {
         addNotification(`💰 雇工日薪结算：-${wageResult.totalWage}金币（${wageResult.settledWorkers.length}人）`, 'info');
-      } else if (wageResult.settledWorkers.length === 0 && farmHire.value.getUsedSlots() > 0) {
-        addNotification('💰 金币不足支付雇工工资，雇工已自动解雇！', 'error');
+      } else if (wageResult.insufficientFunds && wageResult.dismissedWorkers.length > 0) {
+        const names = wageResult.dismissedWorkers.map(id => getVillagerDetail(id)?.name || '村民').join('、');
+        addNotification(`💸 金币不足！已自动解雇雇工：${names}`, 'error');
       }
 
       const harvestShares = farmHire.value.executeWorkerTasks();

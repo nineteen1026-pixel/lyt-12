@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import { useGameStore } from '../game/stores/gameStore';
 import { getVillagerDetail, STAGE_NAMES, STAGE_COLORS } from '../game/data/villagers';
-import { TASK_DESCRIPTIONS, TASK_ICONS, getAvailableTasksForStage, getDailyWage, getYieldShareRate, canHireVillager, getMaxHireSlots } from '../game/data/farmWorkers';
+import { TASK_DESCRIPTIONS, TASK_ICONS, getAvailableTasksForStage, getAvailableTasksForReputation, getDailyWage, getYieldShareRate, canHireVillager, getMaxHireSlots } from '../game/data/farmWorkers';
 import type { FarmWorkerTaskType, AffinityStage } from '../game/types/game';
 
 const gameStore = useGameStore();
@@ -15,13 +15,14 @@ const availableSlots = computed(() => gameStore.farmHireAvailableSlots);
 const totalDailyWage = computed(() => gameStore.farmHireTotalDailyWage);
 const coins = computed(() => gameStore.coins);
 const reputationLevel = computed(() => gameStore.reputationLevelInfo);
+const unlockedTasks = computed(() => getAvailableTasksForReputation(reputationLevel.value.level));
 
 const hiredVillagerIds = computed(() => new Set(activeSlots.value.map(s => s.villagerId)));
 
 const hireableVillagers = computed(() => {
   return allVillagersInfo.value.filter(v => {
     const stage = v.stage as AffinityStage;
-    return canHireVillager(stage) && v.villager?.id && !hiredVillagerIds.value.has(v.villager.id);
+    return canHireVillager(stage) && v.villager?.id && !hiredVillagerIds.value.has(v.villager.id) && unlockedTasks.value.length > 0;
   });
 });
 
@@ -53,9 +54,13 @@ const getNextUnlockInfo = computed(() => {
   const nextLevel = current + 1;
   const nextSlots = getMaxHireSlots(nextLevel);
   const currentSlots = getMaxHireSlots(current);
+  const nextTasks = getAvailableTasksForReputation(nextLevel);
+  const currentTasks = getAvailableTasksForReputation(current);
+  const newTasks = nextTasks.filter(t => !currentTasks.includes(t));
   return {
     level: nextLevel,
-    additionalSlots: nextSlots - currentSlots
+    additionalSlots: nextSlots - currentSlots,
+    newTasks
   };
 });
 </script>
@@ -151,7 +156,7 @@ const getNextUnlockInfo = computed(() => {
             </h3>
             <div v-if="hireableVillagers.length === 0" class="flex-1 flex items-center justify-center">
               <p class="font-pixel text-[11px] text-farm-wood-dark/50">
-                {{ availableSlots > 0 ? '没有可雇佣的村民（需好感度≥初识）' : '雇工名额已满' }}
+                {{ availableSlots > 0 ? (unlockedTasks.length === 0 ? '声望等级不足，暂无可解锁的农活' : '没有可雇佣的村民（需好感度≥初识）') : '雇工名额已满' }}
               </p>
             </div>
             <div v-else class="flex flex-col gap-2 overflow-y-auto flex-1">
@@ -181,7 +186,7 @@ const getNextUnlockInfo = computed(() => {
                 </div>
                 <div class="flex flex-wrap gap-1">
                   <span
-                    v-for="task in getAvailableTasksForStage(v.stage as any)"
+                    v-for="task in unlockedTasks"
                     :key="task"
                     class="font-pixel text-[9px] px-1.5 py-0.5 bg-farm-ui-dark border border-farm-wood-dark/40 text-farm-wood-dark/70"
                   >
@@ -196,9 +201,14 @@ const getNextUnlockInfo = computed(() => {
         <!-- 底部信息栏 -->
         <div class="mt-4 pt-3 border-t-2 border-farm-wood-dark/30 flex items-center justify-between">
           <div class="font-pixel text-[10px] text-farm-wood-dark/70">
-            <span>💡 好感度越高，日薪越低，分成越少。雇工每日自动执行已开启的任务。</span>
+            <span>💡 好感度越高，日薪越低，分成越少。声望等级解锁农活类型：2级→翻地，3级→浇水，4级→收获。</span>
             <span v-if="getNextUnlockInfo" class="ml-2 text-farm-gold">
-              声望等级{{ getNextUnlockInfo.level }}可解锁+{{ getNextUnlockInfo.additionalSlots }}个名额
+              声望等级{{ getNextUnlockInfo.level }}可解锁
+              <template v-if="getNextUnlockInfo.additionalSlots > 0">+{{ getNextUnlockInfo.additionalSlots }}个名额</template>
+              <template v-if="getNextUnlockInfo.additionalSlots > 0 && getNextUnlockInfo.newTasks.length > 0">、</template>
+              <template v-if="getNextUnlockInfo.newTasks.length > 0">
+                {{ getNextUnlockInfo.newTasks.map(t => t === 'till' ? '翻地' : t === 'water' ? '浇水' : '收获').join('、') }}
+              </template>
             </span>
           </div>
           <div class="font-pixel text-[11px] text-farm-wood-dark">

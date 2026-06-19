@@ -749,6 +749,8 @@ export interface DismissWorkerResult {
 export interface WageSettleResult {
   totalWage: number;
   settledWorkers: string[];
+  insufficientFunds: boolean;
+  dismissedWorkers: string[];
 }
 
 export interface WorkerHarvestShare {

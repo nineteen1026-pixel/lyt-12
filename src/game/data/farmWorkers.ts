@@ -8,6 +8,14 @@ export const HIRE_REPUTATION_UNLOCK: Record<number, number> = {
   5: 4
 };
 
+export const REPUTATION_TASK_UNLOCK: Record<number, FarmWorkerTaskType[]> = {
+  1: [],
+  2: ['till'],
+  3: ['till', 'water'],
+  4: ['till', 'water', 'harvest'],
+  5: ['till', 'water', 'harvest']
+};
+
 export const VILLAGER_TASK_UNLOCK: Record<AffinityStage, FarmWorkerTaskType[]> = {
   0: [],
   1: ['till'],
@@ -49,6 +57,10 @@ export const TASK_ICONS: Record<FarmWorkerTaskType, string> = {
 
 export function getMaxHireSlots(reputationLevel: number): number {
   return HIRE_REPUTATION_UNLOCK[reputationLevel] ?? 0;
+}
+
+export function getAvailableTasksForReputation(reputationLevel: number): FarmWorkerTaskType[] {
+  return REPUTATION_TASK_UNLOCK[reputationLevel] ?? [];
 }
 
 export function getAvailableTasksForStage(stage: AffinityStage): FarmWorkerTaskType[] {

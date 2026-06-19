@@ -12,6 +12,7 @@ import type {
 import {
   getMaxHireSlots,
   getAvailableTasksForStage,
+  getAvailableTasksForReputation,
   getDailyWage,
   getYieldShareRate,
   canHireVillager
@@ -52,6 +53,7 @@ export function createInitialFarmHireState(): FarmHireState {
 
 export class FarmHire {
   private state: FarmHireState;
+  private reputationLevel: number = 1;
   private mapAccess: FarmHireMapAccess | null = null;
   private cropAccess: FarmHireCropAccess | null = null;
   private villagerAccess: FarmHireVillagerAccess | null = null;
@@ -128,6 +130,8 @@ export class FarmHire {
   }
 
   updateReputationLevel(level: number): void {
+    const oldLevel = this.reputationLevel;
+    this.reputationLevel = level;
     this.state.maxSlots = getMaxHireSlots(level);
     while (this.getUsedSlots() > this.state.maxSlots) {
       const lastActive = [...this.state.slots].reverse().find(s => s.active);
@@ -137,6 +141,13 @@ export class FarmHire {
         break;
       }
     }
+    if (oldLevel !== level) {
+      this.refreshWorkerStats();
+    }
+  }
+
+  getAvailableTasksForReputation(): FarmWorkerTaskType[] {
+    return getAvailableTasksForReputation(this.reputationLevel);
   }
 
   hireWorker(villagerId: string): HireWorkerResult {
@@ -158,9 +169,9 @@ export class FarmHire {
       return { success: false, message: '雇工名额已满，请提升声望等级解锁更多' };
     }
 
-    const availableTasks = getAvailableTasksForStage(stage as any);
+    const availableTasks = this.getAvailableTasksForReputation();
     if (availableTasks.length === 0) {
-      return { success: false, message: '该村民尚无可执行的农活任务' };
+      return { success: false, message: '声望等级不足，暂无可解锁的农活任务' };
     }
 
     const dailyWage = getDailyWage(stage as any);
@@ -201,6 +212,11 @@ export class FarmHire {
   }
 
   toggleTask(villagerId: string, taskType: FarmWorkerTaskType): { success: boolean; enabled: boolean } {
+    const availableTasks = this.getAvailableTasksForReputation();
+    if (!availableTasks.includes(taskType)) {
+      return { success: false, enabled: false };
+    }
+
     const slot = this.state.slots.find(s => s.villagerId === villagerId && s.active);
     if (!slot) {
       return { success: false, enabled: false };
@@ -217,16 +233,17 @@ export class FarmHire {
 
   settleWages(currentDay: number): WageSettleResult {
     if (currentDay === this.state.lastWageSettleDay) {
-      return { totalWage: 0, settledWorkers: [] };
+      return { totalWage: 0, settledWorkers: [], insufficientFunds: false, dismissedWorkers: [] };
     }
 
     const activeSlots = this.state.slots.filter(s => s.active);
     if (activeSlots.length === 0) {
       this.state.lastWageSettleDay = currentDay;
-      return { totalWage: 0, settledWorkers: [] };
+      return { totalWage: 0, settledWorkers: [], insufficientFunds: false, dismissedWorkers: [] };
     }
 
     const totalWage = activeSlots.reduce((sum, s) => sum + s.dailyWage, 0);
+    const workerIds = activeSlots.map(s => s.villagerId);
 
     if (this.coinAccess) {
       if (!this.coinAccess.spendCoins(totalWage)) {
@@ -234,7 +251,7 @@ export class FarmHire {
           slot.active = false;
         }
         this.state.lastWageSettleDay = currentDay;
-        return { totalWage: 0, settledWorkers: [] };
+        return { totalWage: 0, settledWorkers: [], insufficientFunds: true, dismissedWorkers: workerIds };
       }
     }
 
@@ -243,7 +260,9 @@ export class FarmHire {
 
     return {
       totalWage,
-      settledWorkers: activeSlots.map(s => s.villagerId)
+      settledWorkers: workerIds,
+      insufficientFunds: false,
+      dismissedWorkers: []
     };
   }
 
@@ -259,12 +278,13 @@ export class FarmHire {
       return harvestShares;
     }
 
+    const availableTasks = this.getAvailableTasksForReputation();
     const plots = this.mapAccess.getPlotGrid();
 
     for (const slot of activeSlots) {
-      const tillEnabled = slot.tasks.find(t => t.type === 'till')?.enabled ?? false;
-      const waterEnabled = slot.tasks.find(t => t.type === 'water')?.enabled ?? false;
-      const harvestEnabled = slot.tasks.find(t => t.type === 'harvest')?.enabled ?? false;
+      const tillEnabled = availableTasks.includes('till') && (slot.tasks.find(t => t.type === 'till')?.enabled ?? false);
+      const waterEnabled = availableTasks.includes('water') && (slot.tasks.find(t => t.type === 'water')?.enabled ?? false);
+      const harvestEnabled = availableTasks.includes('harvest') && (slot.tasks.find(t => t.type === 'harvest')?.enabled ?? false);
 
       for (let y = 0; y < plots.length; y++) {
         for (let x = 0; x < plots[y].length; x++) {
@@ -274,17 +294,19 @@ export class FarmHire {
           if (harvestEnabled && plot.state === 'ready' && plot.crop) {
             const result = this.cropAccess.harvest(x, y);
             if (result) {
-              const sharedQty = Math.max(1, Math.floor(result.quantity * slot.yieldShareRate));
-              const keptQty = Math.max(1, result.quantity - sharedQty);
+              const sharedQty = Math.floor(result.quantity * slot.yieldShareRate);
+              const keptQty = result.quantity - sharedQty;
 
               this.state.totalYieldShared += sharedQty;
 
-              harvestShares.push({
-                villagerId: slot.villagerId,
-                itemId: result.itemId,
-                quantity: sharedQty,
-                quality: result.quality
-              });
+              if (sharedQty > 0) {
+                harvestShares.push({
+                  villagerId: slot.villagerId,
+                  itemId: result.itemId,
+                  quantity: sharedQty,
+                  quality: result.quality
+                });
+              }
 
               if (this.inventoryAccess && keptQty > 0) {
                 this.inventoryAccess.addItem(result.itemId, keptQty, result.quality);
@@ -308,6 +330,8 @@ export class FarmHire {
   refreshWorkerStats(): void {
     if (!this.villagerAccess) return;
 
+    const availableTasks = this.getAvailableTasksForReputation();
+
     for (const slot of this.state.slots) {
       if (!slot.active) continue;
 
@@ -315,7 +339,6 @@ export class FarmHire {
       slot.dailyWage = getDailyWage(stage);
       slot.yieldShareRate = getYieldShareRate(stage);
 
-      const availableTasks = getAvailableTasksForStage(stage);
       for (const taskType of availableTasks) {
         if (!slot.tasks.find(t => t.type === taskType)) {
           slot.tasks.push({ type: taskType, enabled: true });
