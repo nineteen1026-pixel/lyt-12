@@ -15,6 +15,7 @@ import LevelUpModal from './components/LevelUpModal.vue';
 import ExpFloatText from './components/ExpFloatText.vue';
 import MiningModal from './components/MiningModal.vue';
 import PetPanel from './components/PetPanel.vue';
+import VillagerPanel from './components/VillagerPanel.vue';
 
 const gameStore = useGameStore();
 const isLoading = ref(true);
@@ -65,6 +66,7 @@ onMounted(async () => {
       <ExpFloatText ref="expFloatTextRef" />
       <MiningModal />
       <PetPanel />
+      <VillagerPanel />
       
       <div class="fixed top-4 right-4 flex flex-col gap-2 z-40">
         <transition-group name="notification">

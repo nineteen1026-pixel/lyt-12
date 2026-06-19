@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed, toRaw } from 'vue';
-import type { GameState, Plot, Animal, Pet, PetType, InventoryItem, ToolType, Season, WeatherType, WeatherState, WeatherSeverity, WeatherWarning, Order, Building, BuildingType, BuildingConfig, GameStats, AchievementProgress, CodexEntry, QualityGrade, SkillTreeState, SkillEffectBonus, SkillNode, LevelUpResult, PetCompanionBonus } from '../types/game';
+import type { GameState, Plot, Animal, Pet, PetType, InventoryItem, ToolType, Season, WeatherType, WeatherState, WeatherSeverity, WeatherWarning, Order, Building, BuildingType, BuildingConfig, GameStats, AchievementProgress, CodexEntry, QualityGrade, SkillTreeState, SkillEffectBonus, SkillNode, LevelUpResult, PetCompanionBonus, AffinityStage, DialogueResult, ExclusiveOrderTemplate } from '../types/game';
 import { QUALITY_PRICE_MULTIPLIER, QUALITY_NAMES, DAY_DURATION } from '../types/game';
 import { MapGrid } from '../modules/MapGrid';
 import { CropGrowth } from '../modules/CropGrowth';
@@ -18,6 +18,7 @@ import { AchievementSystem, type AchievementUnlockResult } from '../modules/Achi
 import { CodexSystem, type DiscoveryResult } from '../modules/Codex';
 import { shareCardGenerator } from '../modules/ShareCard';
 import { getQualitySellPrice, getQualityStars } from '../modules/Quality';
+import { VillagerRelations, type DialogueAdvanceResult } from '../modules/VillagerRelations';
 import { gameDB } from '../db';
 import { getItem } from '../data/items';
 import { getCropConfig } from '../data/crops';
@@ -30,6 +31,7 @@ import { CODEX_ENTRIES, getCodexEntryById } from '../data/codex';
 import { rollFish, rollArtifact, FISH_COOLDOWN, DIG_COOLDOWN } from '../data/exploration';
 import type { MineSession, MineFloor, MineTile, MineExploreResult } from '../types/game';
 import { createMineSession, generateMineFloor, canMoveTo, getStaminaCost, isAdjacent, revealAround, addItemsToSession, getMineralConfig, MINE_ENTRY_COST, MINE_STAMINA_POTION_COST, MINE_STAMINA_POTION_AMOUNT, TOTAL_MINE_FLOORS } from '../data/mining';
+import { getExclusiveOrderById, getVillagerDetail, STAGE_NAMES, STAGE_COLORS } from '../data/villagers';
 
 export const useGameStore = defineStore('game', () => {
   const gameState = ref<GameState | null>(null);
@@ -46,6 +48,7 @@ export const useGameStore = defineStore('game', () => {
   const skillTree = ref<SkillTree | null>(null);
   const achievementSystem = ref<AchievementSystem | null>(null);
   const codexSystem = ref<CodexSystem | null>(null);
+  const villagerRelations = ref<VillagerRelations | null>(null);
   const selectedTool = ref<ToolType>(null);
   const selectedSeed = ref<string | null>(null);
   const selectedBuilding = ref<BuildingType | null>(null);
@@ -53,6 +56,7 @@ export const useGameStore = defineStore('game', () => {
   const showShop = ref(false);
   const showOrders = ref(false);
   const showBuildings = ref(false);
+  const showVillagers = ref(false);
   const isInitialized = ref(false);
   const notifications = ref<Array<{ id: number; message: string; type: 'success' | 'error' | 'info' }>>([]);
   
@@ -122,6 +126,11 @@ export const useGameStore = defineStore('game', () => {
   const discoveredCodexCount = computed(() => codexSystem.value?.getDiscoveredCount() ?? 0);
   const totalCodexCount = computed(() => codexSystem.value?.getTotalCount() ?? 0);
   const codexCompletionPercentage = computed(() => codexSystem.value?.getCompletionPercentage() ?? 0);
+  const allVillagersInfo = computed(() => villagerRelations.value?.getAllVillagersInfo() ?? []);
+  const totalAffinity = computed(() => villagerRelations.value?.getTotalAffinity() ?? 0);
+  const highestAffinityStage = computed(() => villagerRelations.value?.getHighestStage() ?? 0);
+  const storylinesCompletedCount = computed(() => villagerRelations.value?.getStorylinesCompleted() ?? 0);
+  const exclusiveOrdersCompletedCount = computed(() => villagerRelations.value?.getExclusiveOrdersCompleted() ?? 0);
 
   const combinedBonusAccess = {
     getSkillBonus: (): SkillEffectBonus => {
@@ -225,6 +234,40 @@ export const useGameStore = defineStore('game', () => {
           return acc;
         }, {} as Record<string, CodexEntry>)
       );
+
+      const rewardAccess_vr = {
+        addCoins: (amount: number) => {
+          if (shop.value) {
+            shop.value.addCoins(amount);
+            if (gameState.value) gameState.value.coins = shop.value.getCoins();
+          }
+        },
+        addReputation: (amount: number) => {
+          if (orders.value) {
+            orders.value.addReputation(amount);
+            if (gameState.value) gameState.value.reputation = orders.value.getReputation();
+          }
+        },
+        addItem: (itemId: string, quantity: number) => {
+          return inventory.value?.addItem(itemId, quantity) ?? false;
+        }
+      };
+
+      const statisticsAccess_vr = {
+        recordAffinityGained: (amount: number) => statistics.value?.recordAffinityGained(amount),
+        recordStageUp: (villagerId: string, newStage: AffinityStage) => statistics.value?.recordStageUp(villagerId, newStage),
+        recordDialogueCompleted: (villagerId: string) => statistics.value?.recordDialogueCompleted(villagerId),
+        recordExclusiveOrderCompleted: (villagerId: string, orderId: string) => statistics.value?.recordExclusiveOrderCompleted(villagerId, orderId),
+        recordGiftGiven: (villagerId: string, itemId: string) => statistics.value?.recordGiftGiven(villagerId, itemId)
+      };
+
+      villagerRelations.value = new VillagerRelations(
+        savedGame.villagerRelations ?? null,
+        rewardAccess_vr,
+        statisticsAccess_vr
+      );
+
+      villagerRelations.value.subscribe(handleDialogueCompleted);
 
       if (cropGrowth.value) {
         cropGrowth.value.setSkillAccess(combinedBonusAccess);
@@ -403,6 +446,40 @@ export const useGameStore = defineStore('game', () => {
         }, {} as Record<string, CodexEntry>)
       );
 
+      const rewardAccess_vr_new = {
+        addCoins: (amount: number) => {
+          if (shop.value) {
+            shop.value.addCoins(amount);
+            if (gameState.value) gameState.value.coins = shop.value.getCoins();
+          }
+        },
+        addReputation: (amount: number) => {
+          if (orders.value) {
+            orders.value.addReputation(amount);
+            if (gameState.value) gameState.value.reputation = orders.value.getReputation();
+          }
+        },
+        addItem: (itemId: string, quantity: number) => {
+          return inventory.value?.addItem(itemId, quantity) ?? false;
+        }
+      };
+
+      const statisticsAccess_vr_new = {
+        recordAffinityGained: (amount: number) => statistics.value?.recordAffinityGained(amount),
+        recordStageUp: (villagerId: string, newStage: AffinityStage) => statistics.value?.recordStageUp(villagerId, newStage),
+        recordDialogueCompleted: (villagerId: string) => statistics.value?.recordDialogueCompleted(villagerId),
+        recordExclusiveOrderCompleted: (villagerId: string, orderId: string) => statistics.value?.recordExclusiveOrderCompleted(villagerId, orderId),
+        recordGiftGiven: (villagerId: string, itemId: string) => statistics.value?.recordGiftGiven(villagerId, itemId)
+      };
+
+      villagerRelations.value = new VillagerRelations(
+        newGame.villagerRelations ?? null,
+        rewardAccess_vr_new,
+        statisticsAccess_vr_new
+      );
+
+      villagerRelations.value.subscribe(handleDialogueCompleted);
+
       if (cropGrowth.value) {
         cropGrowth.value.setSkillAccess(combinedBonusAccess);
       }
@@ -482,6 +559,48 @@ export const useGameStore = defineStore('game', () => {
   function handleCodexDiscovered(result: DiscoveryResult) {
     if (result.isNew) {
       addNotification(`📖 图鉴发现：${result.entry.name}！`, 'info');
+    }
+  }
+
+  function handleDialogueCompleted(result: DialogueResult) {
+    const detail = getVillagerDetail(result.villagerId);
+    if (result.stageAdvanced) {
+      const stageName = STAGE_NAMES[result.newStage];
+      const color = STAGE_COLORS[result.newStage];
+      addNotification(`💖 与${detail?.name || '村民'}好感度提升至【${stageName}！`, 'success');
+    }
+    for (const orderId of result.unlockedOrders) {
+      const template = getExclusiveOrderById(orderId);
+      if (template && orders.value && villagerRelations.value) {
+        const order = orders.value.addExclusiveOrder(template);
+        if (order) {
+          addNotification(`📜 解锁专属订单：${template.name}`, 'info');
+        }
+      }
+    }
+    for (const codexId of result.codexTriggers) {
+      if (codexSystem.value) {
+        codexSystem.value.discoverVillager(codexId.replace('villager_', ''));
+      }
+    }
+    if (achievementSystem.value && statistics.value) {
+      const newlyUnlocked = achievementSystem.value.checkAchievements(
+        statistics.value.getStats(),
+        codexSystem.value?.getCompletionPercentage()
+      );
+      for (const unlocked of newlyUnlocked) {
+        handleAchievementUnlocked(unlocked);
+      }
+    }
+    if (result.achievementTriggers.length > 0) {
+      for (const achId of result.achievementTriggers) {
+        if (achievementSystem.value && !achievementSystem.value.isUnlocked(achId)) {
+          const ach = getAchievementById(achId);
+          if (ach) {
+            handleAchievementUnlocked({ achievement: ach, reward: ach.reward });
+          }
+        }
+      }
     }
   }
 
@@ -655,7 +774,7 @@ export const useGameStore = defineStore('game', () => {
   }
 
   async function saveGame() {
-    if (!gameState.value || !mapGrid.value || !livestock.value || !petCompanion.value || !inventory.value || !shop.value || !weather.value || !orders.value || !buildings.value || !statistics.value || !skillTree.value || !achievementSystem.value || !codexSystem.value) {
+    if (!gameState.value || !mapGrid.value || !livestock.value || !petCompanion.value || !inventory.value || !shop.value || !weather.value || !orders.value || !buildings.value || !statistics.value || !skillTree.value || !achievementSystem.value || !codexSystem.value || !villagerRelations.value) {
       return;
     }
 
@@ -678,6 +797,7 @@ export const useGameStore = defineStore('game', () => {
     const rawSkillTree = JSON.parse(JSON.stringify(toRaw(skillTree.value.getState())));
     const rawAchievements = JSON.parse(JSON.stringify(toRaw(Object.values(achievementSystem.value.getAllProgress()))));
     const rawCodex = JSON.parse(JSON.stringify(toRaw(codexSystem.value.getAllEntries())));
+    const rawVillagerRelations = JSON.parse(JSON.stringify(toRaw(villagerRelations.value.getState())));
 
     await gameDB.saveCompleteGame(
       rawState,
@@ -690,7 +810,8 @@ export const useGameStore = defineStore('game', () => {
       rawStats,
       rawAchievements,
       rawCodex,
-      rawSkillTree
+      rawSkillTree,
+      rawVillagerRelations
     );
   }
 
@@ -1275,7 +1396,11 @@ export const useGameStore = defineStore('game', () => {
     }
 
     const order = orders.value.getOrderById(orderId);
-    const result = orders.value.submitOrder(orderId);
+    const isExclusive = order?.isExclusive ?? false;
+    const result = isExclusive 
+      ? orders.value.submitExclusiveOrder(orderId)
+      : orders.value.submitOrder(orderId);
+
     if (result.success) {
       gameState.value.coins = shop.value.getCoins();
       gameState.value.reputation = orders.value.getReputation();
@@ -1292,6 +1417,12 @@ export const useGameStore = defineStore('game', () => {
         }
         const repLevel = getReputationLevel(gameState.value.reputation.score);
         statistics.value.recordReputationLevelUp(repLevel.level);
+        if (order?.villagerId) {
+          statistics.value.recordOrderCompletedForVillager(order.villagerId);
+        }
+        if (isExclusive && order?.villagerId && (result as any).templateId) {
+          statistics.value.recordExclusiveOrderCompleted(order.villagerId, (result as any).templateId);
+        }
       }
       if (codexSystem.value && order) {
         codexSystem.value.discoverVillager(order.villagerId);
@@ -1299,9 +1430,24 @@ export const useGameStore = defineStore('game', () => {
           codexSystem.value.discoverItem(result.rareSeedId, result.rareSeedQuantity || 1);
         }
       }
+      if (villagerRelations.value && order?.villagerId) {
+        const affinityDelta = villagerRelations.value.recordOrderCompleted(
+          order.villagerId,
+          order.tier,
+          isExclusive
+        );
+        if (affinityDelta > 0) {
+          const detail = getVillagerDetail(order.villagerId);
+          addNotification(`💝 ${detail?.name || '村民'}好感度 +${affinityDelta}`, 'info');
+        }
+        if (isExclusive && (result as any).templateId) {
+          villagerRelations.value.completeExclusiveOrder(order.villagerId, (result as any).templateId);
+        }
+      }
       checkAchievements();
       
-      let msg = `订单完成！获得${result.coins}金币，+${result.reputation}信誉`;
+      let msg = isExclusive ? `【专属订单】完成！` : `订单完成！`;
+      msg += `获得${result.coins}金币，+${result.reputation}信誉`;
       if (result.rareSeedId && result.rareSeedQuantity) {
         const seedItem = getItem(result.rareSeedId);
         msg += `，额外获得${result.rareSeedQuantity}个${seedItem?.name || '稀有种子'}`;
@@ -1859,6 +2005,83 @@ export const useGameStore = defineStore('game', () => {
     closeMiningModal();
   }
 
+  function openVillagersPanel() {
+    showVillagers.value = true;
+  }
+
+  function closeVillagersPanel() {
+    showVillagers.value = false;
+  }
+
+  function toggleVillagersPanel() {
+    showVillagers.value = !showVillagers.value;
+  }
+
+  function getVillagerInfo(villagerId: string) {
+    return villagerRelations.value?.getVillagerInfo(villagerId) ?? null;
+  }
+
+  function getCurrentDialogue(villagerId: string) {
+    return villagerRelations.value?.getCurrentDialogue(villagerId) ?? null;
+  }
+
+  function advanceVillagerDialogue(villagerId: string, choiceIndex?: number): DialogueAdvanceResult | null {
+    if (!villagerRelations.value) return null;
+    const result = villagerRelations.value.advanceDialogue(villagerId, choiceIndex);
+    if (result.affinityDelta > 0) {
+      addNotification(`💬 对话好感度 +${result.affinityDelta}`, 'info');
+    }
+    if (result.unlockedRewards.length > 0 || result.claimedReward) {
+      const reward = result.claimedReward;
+      if (reward) {
+        let msg = '🎁 获得剧情奖励：';
+        if (reward.type === 'coins') msg += `${reward.amount}金币`;
+        else if (reward.type === 'reputation') msg += `${reward.amount}声望`;
+        else if (reward.type === 'item' || reward.type === 'seed') {
+          const it = getItem(reward.itemId || '');
+          msg += `${it?.name || reward.itemId} x${reward.amount}`;
+        }
+        addNotification(msg, 'success');
+      }
+    }
+    checkAchievements();
+    saveGame();
+    return result;
+  }
+
+  function giveGiftToVillager(villagerId: string, itemId: string, quantity: number = 1): { success: boolean; message: string; affinityDelta?: number } {
+    if (!villagerRelations.value || !inventory.value) {
+      return { success: false, message: '系统未初始化' };
+    }
+    if (!inventory.value.hasItem(itemId, quantity)) {
+      const item = getItem(itemId);
+      return { success: false, message: `${item?.name || itemId}数量不足` };
+    }
+    if (!inventory.value.removeItem(itemId, quantity)) {
+      return { success: false, message: '扣除物品失败' };
+    }
+    const result = villagerRelations.value.giveGift(villagerId, itemId);
+    if (result.success && result.affinityDelta) {
+      const detail = getVillagerDetail(villagerId);
+      if (result.affinityDelta > 0) {
+        addNotification(`🎁 ${detail?.name || '村民'}很喜欢这个礼物！好感度 +${result.affinityDelta}`, 'success');
+      } else if (result.affinityDelta < 0) {
+        addNotification(`😞 ${detail?.name || '村民'}似乎不喜欢...好感度 ${result.affinityDelta}`, 'error');
+      }
+    }
+    checkAchievements();
+    saveGame();
+    return {
+      success: result.success,
+      message: result.message || (result.success ? '赠送成功' : '赠送失败'),
+      affinityDelta: result.affinityDelta
+    };
+  }
+
+  function resetVillagerDialogue(villagerId: string): boolean {
+    return villagerRelations.value?.resetVillagerDialogue(villagerId) ?? false;
+  }
+
   return {
     gameState,
     mapGrid,
@@ -1924,6 +2147,13 @@ export const useGameStore = defineStore('game', () => {
     discoveredCodexCount,
     totalCodexCount,
     codexCompletionPercentage,
+    villagerRelations,
+    showVillagers,
+    allVillagersInfo,
+    totalAffinity,
+    highestAffinityStage,
+    storylinesCompletedCount,
+    exclusiveOrdersCompletedCount,
     initGame,
     saveGame,
     useTool,
@@ -1999,6 +2229,14 @@ export const useGameStore = defineStore('game', () => {
     setActivePet,
     petAnimal,
     feedPet,
-    renamePet
+    renamePet,
+    openVillagersPanel,
+    closeVillagersPanel,
+    toggleVillagersPanel,
+    getVillagerInfo,
+    getCurrentDialogue,
+    advanceVillagerDialogue,
+    giveGiftToVillager,
+    resetVillagerDialogue
   };
 });

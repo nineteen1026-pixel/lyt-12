@@ -311,8 +311,35 @@ export class AchievementSystem {
       case 'totalCropsLostToDisasters':
         current = stats.totalCropsLostToDisasters || 0;
         break;
+      case 'totalAffinityGained':
+        current = stats.totalAffinityGained || 0;
+        break;
+      case 'villagersWithMaxAffinity':
+        current = stats.villagersWithMaxAffinity || 0;
+        break;
+      case 'storyDialoguesCompleted':
+        current = stats.storyDialoguesCompleted || 0;
+        break;
+      case 'exclusiveOrdersCompleted':
+        current = stats.exclusiveOrdersCompleted || 0;
+        break;
+      case 'giftsGivenToVillagers':
+        current = stats.giftsGivenToVillagers || 0;
+        break;
+      case 'villagerStorylinesCompleted':
+        current = stats.villagerStorylinesCompleted || 0;
+        break;
       default:
-        current = 0;
+        if (type.startsWith('villagersAtStage.stage_')) {
+          const stageStr = type.replace('villagersAtStage.stage_', '');
+          const stage = parseInt(stageStr, 10) as 0 | 1 | 2 | 3 | 4 | 5;
+          current = stats.villagersAtStage?.[stage] || 0;
+        } else if (type.startsWith('ordersCompletedForVillagers.')) {
+          const vid = type.replace('ordersCompletedForVillagers.', '');
+          current = stats.ordersCompletedForVillagers?.[vid] || 0;
+        } else {
+          current = 0;
+        }
     }
 
     if (target <= 0) return 0;

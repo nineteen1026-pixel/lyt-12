@@ -150,6 +150,10 @@ export interface Order {
   createdAt: number;
   deadline: number;
   status: OrderStatus;
+  isExclusive?: boolean;
+  exclusiveTemplateId?: string;
+  exclusiveName?: string;
+  exclusiveDescription?: string;
 }
 
 export interface ReputationState {
@@ -183,7 +187,7 @@ export interface InventoryItem {
 
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 
-export type AchievementCategory = 'farming' | 'animal' | 'building' | 'order' | 'economy' | 'exploration' | 'seasonal' | 'disaster';
+export type AchievementCategory = 'farming' | 'animal' | 'building' | 'order' | 'economy' | 'exploration' | 'seasonal' | 'disaster' | 'social';
 
 export type CodexCategory = 'crop' | 'animal' | 'pet' | 'item' | 'building' | 'villager' | 'fish' | 'artifact' | 'mineral';
 
@@ -302,6 +306,14 @@ export interface GameStats {
   cropsLostToDrought: number;
   cropsLostToHeatwave: number;
   totalCropsLostToDisasters: number;
+  totalAffinityGained: number;
+  villagersAtStage: Record<AffinityStage, number>;
+  villagersWithMaxAffinity: number;
+  storyDialoguesCompleted: number;
+  exclusiveOrdersCompleted: number;
+  giftsGivenToVillagers: number;
+  ordersCompletedForVillagers: Record<string, number>;
+  villagerStorylinesCompleted: number;
 }
 
 export interface AchievementState {
@@ -587,4 +599,112 @@ export interface PetCompanionBonus {
   feedBonus: number;
   greenhouseBoost: number;
   rareChance: number;
+}
+
+export type AffinityStage = 0 | 1 | 2 | 3 | 4 | 5;
+
+export interface DialogueChoice {
+  text: string;
+  affinityDelta: number;
+  nextNodeId?: string;
+  unlockRewardId?: string;
+}
+
+export interface DialogueNode {
+  id: string;
+  stage: AffinityStage;
+  speaker: 'villager' | 'player' | 'narrator';
+  text: string;
+  choices?: DialogueChoice[];
+  autoNext?: string;
+  isEnding?: boolean;
+  unlockOrderId?: string;
+  unlockRewardId?: string;
+  triggerCodexId?: string;
+  triggerAchievementId?: string;
+}
+
+export interface StorylineReward {
+  id: string;
+  type: 'coins' | 'item' | 'seed' | 'reputation' | 'title';
+  amount?: number;
+  itemId?: string;
+  title?: string;
+  description: string;
+}
+
+export interface ExclusiveOrderTemplate {
+  id: string;
+  villagerId: string;
+  unlockStage: AffinityStage;
+  name: string;
+  description: string;
+  items: OrderItem[];
+  reward: OrderReward;
+  deadlineDays: number;
+  oneTimeOnly: boolean;
+  priority: number;
+}
+
+export interface VillagerDetail {
+  id: string;
+  name: string;
+  avatar: string;
+  personality: string;
+  backstory: string;
+  likes: string[];
+  dislikes: string[];
+  birthday?: string;
+  occupation: string;
+  favoriteItems: string[];
+  hatedItems: string[];
+}
+
+export interface VillagerRelationState {
+  villagerId: string;
+  affinity: number;
+  stage: AffinityStage;
+  currentDialogueId: string;
+  completedDialogueIds: string[];
+  unlockedExclusiveOrderIds: string[];
+  completedExclusiveOrderIds: string[];
+  claimedRewardIds: string[];
+  ordersCompletedFor: number;
+  giftsGiven: number;
+  lastInteractTime: number;
+}
+
+export interface VillagerRelationsState {
+  relations: Record<string, VillagerRelationState>;
+  totalAffinity: number;
+  highestStage: AffinityStage;
+  storylinesCompleted: number;
+  exclusiveOrdersCompleted: number;
+}
+
+export interface DialogueResult {
+  villagerId: string;
+  nodeId: string;
+  affinityGained: number;
+  stageAdvanced: boolean;
+  newStage: AffinityStage;
+  unlockedOrders: string[];
+  unlockedRewards: string[];
+  codexTriggers: string[];
+  achievementTriggers: string[];
+}
+
+export interface StageProgress {
+  current: number;
+  required: number;
+  percentage: number;
+}
+
+export interface VillagerInteractionResult {
+  success: boolean;
+  message?: string;
+  affinityDelta?: number;
+  newStage?: AffinityStage;
+  unlockedOrder?: string;
+  reward?: StorylineReward;
 }

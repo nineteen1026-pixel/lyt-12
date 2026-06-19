@@ -8,7 +8,8 @@ export const ACHIEVEMENT_CATEGORY_NAMES: Record<AchievementCategory, string> = {
   economy: '经济',
   exploration: '探索',
   seasonal: '季节',
-  disaster: '防灾'
+  disaster: '防灾',
+  social: '社交'
 };
 
 export const ACHIEVEMENTS: Achievement[] = [
@@ -747,5 +748,182 @@ ACHIEVEMENTS.push(
     conditions: [{ type: 'perfectDisasterDefense', target: 5 }],
     conditionLogic: 'all',
     reward: { coins: 5000, reputation: 200, title: '不屈守护者' }
+  },
+  {
+    id: 'first_meeting',
+    name: '初次相遇',
+    description: '与第一位村民完成对话',
+    icon: '👋',
+    category: 'social',
+    rarity: 'common',
+    conditions: [{ type: 'storyDialoguesCompleted', target: 1 }],
+    conditionLogic: 'all',
+    reward: { coins: 50, reputation: 5 }
+  },
+  {
+    id: 'new_friend',
+    name: '新朋友',
+    description: '将任意村民好感度提升至「熟人」阶段',
+    icon: '🤝',
+    category: 'social',
+    rarity: 'common',
+    conditions: [{ type: 'villagersAtStage.stage_2', target: 1 }],
+    conditionLogic: 'all',
+    reward: { coins: 100, reputation: 10 }
+  },
+  {
+    id: 'good_friend',
+    name: '好友相聚',
+    description: '将任意村民好感度提升至「好友」阶段',
+    icon: '😊',
+    category: 'social',
+    rarity: 'uncommon',
+    conditions: [{ type: 'villagersAtStage.stage_3', target: 1 }],
+    conditionLogic: 'all',
+    reward: { coins: 200, reputation: 15 }
+  },
+  {
+    id: 'first_exclusive_order',
+    name: '信任之托',
+    description: '完成第一个专属订单',
+    icon: '📜',
+    category: 'social',
+    rarity: 'uncommon',
+    conditions: [{ type: 'exclusiveOrdersCompleted', target: 1 }],
+    conditionLogic: 'all',
+    reward: { coins: 200, reputation: 20 }
+  },
+  {
+    id: 'first_gift',
+    name: '礼尚往来',
+    description: '赠送第一份礼物给村民',
+    icon: '🎁',
+    category: 'social',
+    rarity: 'common',
+    conditions: [{ type: 'giftsGivenToVillagers', target: 1 }],
+    conditionLogic: 'all',
+    reward: { coins: 30, reputation: 5 }
+  },
+  {
+    id: 'generous_giver',
+    name: '慷慨大方',
+    description: '累计赠送20份礼物给村民',
+    icon: '🎀',
+    category: 'social',
+    rarity: 'uncommon',
+    conditions: [{ type: 'giftsGivenToVillagers', target: 20 }],
+    conditionLogic: 'all',
+    reward: { coins: 300, reputation: 20 }
+  },
+  {
+    id: 'story_connoisseur',
+    name: '故事达人',
+    description: '累计完成20段剧情对话',
+    icon: '📖',
+    category: 'social',
+    rarity: 'rare',
+    conditions: [{ type: 'storyDialoguesCompleted', target: 20 }],
+    conditionLogic: 'all',
+    reward: { coins: 400, reputation: 30 }
+  },
+  {
+    id: 'exclusive_master',
+    name: '专属订单大师',
+    description: '完成10个专属订单',
+    icon: '🏅',
+    category: 'social',
+    rarity: 'rare',
+    conditions: [{ type: 'exclusiveOrdersCompleted', target: 10 }],
+    conditionLogic: 'all',
+    reward: { coins: 600, reputation: 40 }
+  },
+  {
+    id: 'bosom_friend',
+    name: '挚友',
+    description: '将任意村民好感度提升至「挚友」阶段',
+    icon: '💙',
+    category: 'social',
+    rarity: 'rare',
+    conditions: [{ type: 'villagersAtStage.stage_4', target: 1 }],
+    conditionLogic: 'all',
+    reward: { coins: 500, reputation: 35 }
+  },
+  {
+    id: 'soulmate',
+    name: '知己',
+    description: '将任意村民好感度提升至最高「知己」阶段',
+    icon: '🧡',
+    category: 'social',
+    rarity: 'epic',
+    conditions: [{ type: 'villagersAtStage.stage_5', target: 1 }],
+    conditionLogic: 'all',
+    reward: { coins: 800, reputation: 60, title: '知心人' }
+  },
+  {
+    id: 'first_storyline_complete',
+    name: '剧情初见',
+    description: '完成第一位村民的完整剧情线',
+    icon: '✨',
+    category: 'social',
+    rarity: 'epic',
+    conditions: [{ type: 'villagerStorylinesCompleted', target: 1 }],
+    conditionLogic: 'all',
+    reward: { coins: 1000, reputation: 60 }
+  },
+  {
+    id: 'social_butterfly',
+    name: '社交达人',
+    description: '与所有村民达到「熟人」阶段',
+    icon: '🦋',
+    category: 'social',
+    rarity: 'rare',
+    conditions: [{ type: 'villagersAtStage.stage_2', target: 8 }],
+    conditionLogic: 'all',
+    reward: { coins: 500, reputation: 35 }
+  },
+  {
+    id: 'popular_farmer',
+    name: '人气农户',
+    description: '与4位村民成为「好友」',
+    icon: '🌟',
+    category: 'social',
+    rarity: 'epic',
+    conditions: [{ type: 'villagersAtStage.stage_3', target: 4 }],
+    conditionLogic: 'all',
+    reward: { coins: 800, reputation: 50, title: '人气农户' }
+  },
+  {
+    id: 'all_storylines_complete',
+    name: '乡村故事全集',
+    description: '完成所有村民的完整剧情线',
+    icon: '📚',
+    category: 'social',
+    rarity: 'legendary',
+    conditions: [{ type: 'villagerStorylinesCompleted', target: 8 }],
+    conditionLogic: 'all',
+    reward: { coins: 3000, reputation: 150, title: '故事之王' }
+  },
+  {
+    id: 'all_soulmates',
+    name: '全民知己',
+    description: '与所有村民达到「知己」最高好感度',
+    icon: '🌈',
+    category: 'social',
+    rarity: 'legendary',
+    secret: true,
+    conditions: [{ type: 'villagersWithMaxAffinity', target: 8 }],
+    conditionLogic: 'all',
+    reward: { coins: 8000, reputation: 300, title: '乡村守护者' }
+  },
+  {
+    id: 'affinity_1000',
+    name: '千点友谊',
+    description: '累计获得1000好感度',
+    icon: '💯',
+    category: 'social',
+    rarity: 'epic',
+    conditions: [{ type: 'totalAffinityGained', target: 1000 }],
+    conditionLogic: 'all',
+    reward: { coins: 1000, reputation: 70 }
   }
 );

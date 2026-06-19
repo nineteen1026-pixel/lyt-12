@@ -175,6 +175,20 @@ const toggleBuildingsPanel = () => {
     </div>
 
     <div 
+      class="tool-btn flex flex-col items-center justify-center w-16 h-16 bg-gradient-to-b from-teal-700 to-teal-900 border-3 border-teal-950 cursor-pointer transition-all hover:from-teal-600 hover:to-teal-800 hover:scale-105 active:scale-95 relative shadow-lg"
+      @click="gameStore.toggleVillagersPanel()"
+    >
+      <span class="text-2xl">👥</span>
+      <span class="font-pixel text-[8px] text-teal-100 mt-1">村民</span>
+      <span 
+        v-if="gameStore.totalAffinity > 0"
+        class="absolute -top-1 -right-1 w-5 h-5 bg-teal-500 text-white font-pixel text-[10px] rounded-full flex items-center justify-center border-2 border-farm-wood-dark"
+      >
+        {{ gameStore.highestAffinityStage }}
+      </span>
+    </div>
+
+    <div 
       class="tool-btn flex flex-col items-center justify-center w-16 h-16 bg-gradient-to-b from-amber-700 to-amber-900 border-3 border-amber-950 cursor-pointer transition-all hover:from-amber-600 hover:to-amber-800 hover:scale-105 active:scale-95 relative shadow-lg"
       @click="gameStore.openMiningModal()"
     >

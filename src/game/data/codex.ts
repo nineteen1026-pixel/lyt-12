@@ -5,6 +5,7 @@ import { ANIMALS } from './animals';
 import { PETS } from './pets';
 import { BUILDINGS } from './buildings';
 import { VILLAGERS } from './orders';
+import { VILLAGER_DETAILS, STAGE_NAMES } from './villagers';
 
 export const CODEX_CATEGORY_NAMES: Record<CodexCategory, string> = {
   crop: '作物',
@@ -98,17 +99,21 @@ function createBuildingCodexEntries(): CodexEntry[] {
 }
 
 function createVillagerCodexEntries(): CodexEntry[] {
-  return VILLAGERS.map((villager, index) => ({
-    id: `villager_${villager.id}`,
-    name: villager.name,
-    description: `一位友善的村民，会经常来农场下订单`,
-    icon: villager.avatar,
-    category: 'villager' as const,
-    rarity: index < 4 ? 'common' : index < 7 ? 'uncommon' : 'rare',
-    discovered: false,
-    count: 0,
-    hint: '完成订单时会遇到不同的村民'
-  }));
+  return VILLAGERS.map((villager, index) => {
+    const detail = VILLAGER_DETAILS[villager.id];
+    const rarity = index < 3 ? 'common' : index < 6 ? 'uncommon' : 'rare';
+    return {
+      id: `villager_${villager.id}`,
+      name: detail?.name || villager.name,
+      description: detail ? `${detail.occupation} · ${detail.personality}\n${detail.backstory}` : `一位友善的村民，会经常来农场下订单`,
+      icon: detail?.avatar || villager.avatar,
+      category: 'villager' as const,
+      rarity,
+      discovered: false,
+      count: 0,
+      hint: detail ? `喜好: ${detail.likes.join('、')} | 生日: ${detail.birthday || '未知'}\n好感度阶段: ${STAGE_NAMES[0]}→${STAGE_NAMES[5]}` : '完成订单时会遇到不同的村民'
+    };
+  });
 }
 
 function createFishCodexEntries(): CodexEntry[] {

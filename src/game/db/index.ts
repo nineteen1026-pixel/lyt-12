@@ -1,11 +1,12 @@
 import { openDB, IDBPDatabase } from 'idb';
 import { DB_CONFIG, STORE_CONFIGS, INITIAL_GAME_STATE, INITIAL_REPUTATION, type DBStores } from './schema';
-import type { GameState, Plot, Animal, Pet, InventoryItem, Order, Building, GameStats, AchievementProgress, CodexEntry, SkillTreeState } from '../types/game';
+import type { GameState, Plot, Animal, Pet, InventoryItem, Order, Building, GameStats, AchievementProgress, CodexEntry, SkillTreeState, VillagerRelationsState } from '../types/game';
 import { GRID_WIDTH, GRID_HEIGHT, INITIAL_UNLOCKED } from '../types/game';
 import { INITIAL_STATS } from '../modules/Statistics';
 import { INITIAL_SKILL_TREE_STATE } from '../modules/SkillTree';
 import { ACHIEVEMENTS } from '../data/achievements';
 import { CODEX_ENTRIES } from '../data/codex';
+import { createInitialVillagerRelations } from '../data/villagers';
 
 class GameDatabase {
   private db: IDBPDatabase<DBStores> | null = null;
@@ -285,6 +286,22 @@ class GameDatabase {
     }
   }
 
+  async saveVillagerRelations(relations: VillagerRelationsState): Promise<void> {
+    const db = this.ensureDB();
+    const clone = JSON.parse(JSON.stringify(relations));
+    clone.id = 'main';
+    await db.put('villagerRelations', clone);
+  }
+
+  async getVillagerRelations(): Promise<VillagerRelationsState | undefined> {
+    const db = this.ensureDB();
+    try {
+      return await db.get('villagerRelations', 'main');
+    } catch (e) {
+      return undefined;
+    }
+  }
+
   async initializeNewGame(): Promise<{
     state: GameState;
     plots: Plot[];
@@ -297,6 +314,7 @@ class GameDatabase {
     achievements: AchievementProgress[];
     codex: CodexEntry[];
     skillTree: SkillTreeState;
+    villagerRelations: VillagerRelationsState;
   }> {
     const now = Date.now();
     const state: GameState = {
@@ -361,6 +379,7 @@ class GameDatabase {
 
     const codex: CodexEntry[] = CODEX_ENTRIES.map(e => ({ ...e }));
     const skillTree: SkillTreeState = { ...INITIAL_SKILL_TREE_STATE };
+    const villagerRelations: VillagerRelationsState = createInitialVillagerRelations();
 
     await this.saveGameState(state);
     await this.saveAllPlots(plots);
@@ -373,8 +392,9 @@ class GameDatabase {
     await this.saveAllAchievements(achievements);
     await this.saveAllCodexEntries(codex);
     await this.saveSkillTree(skillTree);
+    await this.saveVillagerRelations(villagerRelations);
 
-    return { state, plots, animals, pets, inventory, orders, buildings, stats, achievements, codex, skillTree };
+    return { state, plots, animals, pets, inventory, orders, buildings, stats, achievements, codex, skillTree, villagerRelations };
   }
 
   async loadGame(): Promise<{
@@ -389,6 +409,7 @@ class GameDatabase {
     achievements?: AchievementProgress[];
     codex?: CodexEntry[];
     skillTree?: SkillTreeState;
+    villagerRelations?: VillagerRelationsState;
   } | null> {
     const state = await this.getGameState();
     if (!state) {
@@ -436,8 +457,9 @@ class GameDatabase {
     const achievements = await this.getAllAchievements();
     const codex = await this.getAllCodexEntries();
     const skillTree = await this.getSkillTree();
+    const villagerRelations = await this.getVillagerRelations();
 
-    return { state, plots, animals, pets, inventory, orders, buildings, stats, achievements, codex, skillTree };
+    return { state, plots, animals, pets, inventory, orders, buildings, stats, achievements, codex, skillTree, villagerRelations };
   }
 
   async saveCompleteGame(
@@ -451,7 +473,8 @@ class GameDatabase {
     stats?: GameStats,
     achievements?: AchievementProgress[],
     codex?: CodexEntry[],
-    skillTree?: SkillTreeState
+    skillTree?: SkillTreeState,
+    villagerRelations?: VillagerRelationsState
   ): Promise<void> {
     await this.saveGameState(state);
     await this.saveAllPlots(plots);
@@ -472,6 +495,9 @@ class GameDatabase {
     }
     if (skillTree) {
       await this.saveSkillTree(skillTree);
+    }
+    if (villagerRelations) {
+      await this.saveVillagerRelations(villagerRelations);
     }
   }
 

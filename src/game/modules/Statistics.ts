@@ -1,4 +1,4 @@
-import type { GameStats, Season, OrderTier, QualityGrade, WeatherType, BuildingType, PetType } from '../types/game';
+import type { GameStats, Season, OrderTier, QualityGrade, WeatherType, BuildingType, PetType, AffinityStage } from '../types/game';
 import { EXPERIENCE_REWARDS } from '../types/game';
 import type { SkillExperienceGain } from './SkillTree';
 
@@ -85,7 +85,15 @@ export const INITIAL_STATS: GameStats = {
   cropsLostToFrost: 0,
   cropsLostToDrought: 0,
   cropsLostToHeatwave: 0,
-  totalCropsLostToDisasters: 0
+  totalCropsLostToDisasters: 0,
+  totalAffinityGained: 0,
+  villagersAtStage: { 0: 8, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+  villagersWithMaxAffinity: 0,
+  storyDialoguesCompleted: 0,
+  exclusiveOrdersCompleted: 0,
+  giftsGivenToVillagers: 0,
+  ordersCompletedForVillagers: {},
+  villagerStorylinesCompleted: 0
 };
 
 export type StatEventType =
@@ -125,7 +133,14 @@ export type StatEventType =
   | 'severe_disaster_survived'
   | 'crops_saved_by_building'
   | 'crops_lost_to_disaster'
-  | 'perfect_disaster_defense';
+  | 'perfect_disaster_defense'
+  | 'affinity_gained'
+  | 'stage_up'
+  | 'dialogue_completed'
+  | 'exclusive_order_completed'
+  | 'gift_given'
+  | 'order_completed_for_villager'
+  | 'villager_storyline_completed';
 
 export interface StatEvent {
   type: StatEventType;
@@ -156,7 +171,9 @@ export class Statistics {
       mineralsMined: { ...INITIAL_STATS.mineralsMined, ...initialStats?.mineralsMined },
       totalOresMined: { ...INITIAL_STATS.totalOresMined, ...initialStats?.totalOresMined },
       disastersByType: { ...INITIAL_STATS.disastersByType, ...initialStats?.disastersByType },
-      petsAdopted: { ...INITIAL_STATS.petsAdopted, ...initialStats?.petsAdopted }
+      petsAdopted: { ...INITIAL_STATS.petsAdopted, ...initialStats?.petsAdopted },
+      villagersAtStage: { ...INITIAL_STATS.villagersAtStage, ...initialStats?.villagersAtStage },
+      ordersCompletedForVillagers: { ...INITIAL_STATS.ordersCompletedForVillagers, ...initialStats?.ordersCompletedForVillagers }
     };
     this.skillExperienceAccess = skillExperienceAccess || null;
   }
@@ -479,5 +496,56 @@ export class Statistics {
   recordPerfectDisasterDefense() {
     this.stats.perfectDisasterDefense += 1;
     this.notify(this.createEvent('perfect_disaster_defense', {}));
+  }
+
+  recordAffinityGained(amount: number): SkillExperienceGain | null {
+    this.stats.totalAffinityGained += Math.max(0, amount);
+    const expGain = this.addSkillExperience('affinity_gained', 1);
+    this.notify(this.createEvent('affinity_gained', { amount, expGain }));
+    return expGain;
+  }
+
+  recordStageUp(villagerId: string, newStage: AffinityStage) {
+    for (let s = 0; s <= 5; s++) {
+      if (this.stats.villagersAtStage[s as AffinityStage] > 0 && s < newStage) {
+        this.stats.villagersAtStage[s as AffinityStage] = Math.max(0, this.stats.villagersAtStage[s as AffinityStage] - 1);
+      }
+    }
+    this.stats.villagersAtStage[newStage] = (this.stats.villagersAtStage[newStage] || 0) + 1;
+    this.stats.villagersWithMaxAffinity = this.stats.villagersAtStage[5];
+    this.notify(this.createEvent('stage_up', { villagerId, newStage }));
+  }
+
+  recordDialogueCompleted(villagerId: string) {
+    this.stats.storyDialoguesCompleted += 1;
+    const expGain = this.addSkillExperience('dialogue_completed', 1);
+    this.notify(this.createEvent('dialogue_completed', { villagerId, expGain }));
+    return expGain;
+  }
+
+  recordExclusiveOrderCompleted(villagerId: string, orderId: string) {
+    this.stats.exclusiveOrdersCompleted += 1;
+    const expGain = this.addSkillExperience('exclusive_order_completed', 1);
+    this.notify(this.createEvent('exclusive_order_completed', { villagerId, orderId, expGain }));
+    return expGain;
+  }
+
+  recordGiftGiven(villagerId: string, itemId: string): SkillExperienceGain | null {
+    this.stats.giftsGivenToVillagers += 1;
+    const expGain = this.addSkillExperience('gift_given', 1);
+    this.notify(this.createEvent('gift_given', { villagerId, itemId, expGain }));
+    return expGain;
+  }
+
+  recordOrderCompletedForVillager(villagerId: string) {
+    this.stats.ordersCompletedForVillagers[villagerId] = (this.stats.ordersCompletedForVillagers[villagerId] || 0) + 1;
+    this.notify(this.createEvent('order_completed_for_villager', { villagerId }));
+  }
+
+  recordVillagerStorylineCompleted(villagerId: string): SkillExperienceGain | null {
+    this.stats.villagerStorylinesCompleted += 1;
+    const expGain = this.addSkillExperience('villager_storyline_completed', 1);
+    this.notify(this.createEvent('villager_storyline_completed', { villagerId, expGain }));
+    return expGain;
   }
 }

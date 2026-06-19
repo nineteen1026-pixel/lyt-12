@@ -215,20 +215,38 @@ const refreshOrders = () => {
           >
             <div 
               class="p-3 flex items-center gap-3 border-b-2 border-farm-wood-dark"
-              :style="{ borderLeft: `4px solid ${getTierInfo(order.tier).color}` }"
+              :style="{ borderLeft: `4px solid ${order.isExclusive ? '#f59e0b' : getTierInfo(order.tier).color}` }"
             >
               <span class="text-3xl">{{ getVillager(order.villagerId)?.avatar || '👤' }}</span>
               <div class="flex-1">
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 flex-wrap">
                   <span class="font-pixel text-sm text-farm-wood-dark">
                     {{ getVillager(order.villagerId)?.name || '村民' }}
                   </span>
                   <span 
-                    class="font-pixel text-[10px] px-2 py-0.5 text-white"
-                    :style="{ backgroundColor: getTierInfo(order.tier).color }"
+                    v-if="order.isExclusive"
+                    class="font-pixel text-[10px] px-2 py-0.5 bg-gradient-to-r from-amber-400 to-yellow-500 text-amber-950 border border-amber-600 shadow-md animate-pulse"
                   >
-                    {{ getTierInfo(order.tier).name }}
+                    ⭐ 专属
                   </span>
+                  <span 
+                    class="font-pixel text-[10px] px-2 py-0.5 text-white"
+                    :style="{ backgroundColor: order.isExclusive ? '#f59e0b' : getTierInfo(order.tier).color }"
+                  >
+                    {{ order.isExclusive ? '限定' : getTierInfo(order.tier).name }}
+                  </span>
+                </div>
+                <div 
+                  v-if="order.isExclusive && order.exclusiveName" 
+                  class="font-pixel text-[11px] text-amber-700 font-bold mt-0.5"
+                >
+                  📜 {{ order.exclusiveName }}
+                </div>
+                <div 
+                  v-if="order.isExclusive && order.exclusiveDescription" 
+                  class="font-pixel text-[9px] text-farm-wood-dark/70 mt-0.5 italic"
+                >
+                  "{{ order.exclusiveDescription }}"
                 </div>
                 <div class="font-pixel text-[10px] text-farm-wood-dark/60 mt-0.5">
                   订单号: {{ order.id.slice(-8) }}

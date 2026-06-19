@@ -1,4 +1,4 @@
-import type { Order, OrderItem, OrderTier, OrderReward, ReputationState, Season, QualityGrade } from '../types/game';
+import type { Order, OrderItem, OrderTier, OrderReward, ReputationState, Season, QualityGrade, ExclusiveOrderTemplate } from '../types/game';
 import { DAY_DURATION } from '../types/game';
 import {
   TIER_CONFIG,
@@ -370,5 +370,79 @@ export class Orders {
 
   getFailedCount(): number {
     return this.reputation.failedOrders;
+  }
+
+  generateExclusiveOrder(template: ExclusiveOrderTemplate): Order {
+    const now = Date.now();
+    const deadline = now + template.deadlineDays * DAY_DURATION;
+    return {
+      id: `exclusive_${template.id}_${now}_${Math.random().toString(36).substr(2, 9)}`,
+      villagerId: template.villagerId,
+      tier: 'epic',
+      items: template.items.map(item => ({ ...item })),
+      reward: { ...template.reward },
+      createdAt: now,
+      deadline,
+      status: 'active',
+      isExclusive: true,
+      exclusiveTemplateId: template.id,
+      exclusiveName: template.name,
+      exclusiveDescription: template.description
+    };
+  }
+
+  addExclusiveOrder(template: ExclusiveOrderTemplate): Order | null {
+    if (this.hasExclusiveOrder(template.id)) {
+      return null;
+    }
+    const order = this.generateExclusiveOrder(template);
+    this.orders.set(order.id, order);
+    return order;
+  }
+
+  hasExclusiveOrder(templateId: string): boolean {
+    for (const order of this.orders.values()) {
+      if (order.exclusiveTemplateId === templateId && order.status === 'active') {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  getExclusiveOrders(): Order[] {
+    return Array.from(this.orders.values()).filter(o => o.isExclusive);
+  }
+
+  getActiveExclusiveOrders(): Order[] {
+    return this.getExclusiveOrders().filter(o => o.status === 'active');
+  }
+
+  isExclusiveOrderCompleted(templateId: string): boolean {
+    for (const order of this.orders.values()) {
+      if (order.exclusiveTemplateId === templateId && order.status === 'completed') {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  submitExclusiveOrder(orderId: string): {
+    success: boolean;
+    message?: string;
+    coins?: number;
+    reputation?: number;
+    rareSeedId?: string;
+    rareSeedQuantity?: number;
+    templateId?: string;
+  } {
+    const result = this.submitOrder(orderId);
+    if (result.success) {
+      const order = this.orders.get(orderId);
+      return {
+        ...result,
+        templateId: order?.exclusiveTemplateId
+      };
+    }
+    return result;
   }
 }
