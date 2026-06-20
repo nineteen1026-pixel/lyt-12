@@ -9,7 +9,9 @@ import type {
   QualityGrade,
   OrderTier,
   StorylineReward,
-  DialogueChoice
+  DialogueChoice,
+  OrderItem,
+  OrderReward
 } from '../types/game';
 import { FESTIVAL_AFFINITY_GAIN, DAY_DURATION } from '../types/game';
 import {
@@ -24,6 +26,7 @@ import {
   getFestivalOrderById
 } from '../data/festivalGifts';
 import { getVillagerDetail } from '../data/villagers';
+import { getItem } from '../data/items';
 
 export interface FestivalVillagerAccess {
   getStage(villagerId: string): AffinityStage;
@@ -41,6 +44,7 @@ export interface FestivalInventoryAccess {
   removeItem(itemId: string, quantity: number, quality?: QualityGrade): boolean;
   getItemQuality(itemId: string): QualityGrade;
   getBestQuality(itemId: string): QualityGrade;
+  getItemCount(itemId: string, minQuality?: QualityGrade): number;
 }
 
 export interface FestivalRewardAccess {
@@ -483,6 +487,100 @@ export class FestivalGift {
       }
     }
     return results.sort((a, b) => a.priority - b.priority);
+  }
+
+  canSubmitFestivalOrder(orderId: string): { canSubmit: boolean; missingItems: OrderItem[] } {
+    const order = getFestivalOrderById(orderId);
+    if (!order) {
+      return { canSubmit: false, missingItems: [] };
+    }
+
+    if (this.state.completedFestivalOrders.includes(orderId)) {
+      return { canSubmit: false, missingItems: [] };
+    }
+
+    if (!this.state.unlockedFestivalOrders.includes(orderId)) {
+      return { canSubmit: false, missingItems: [] };
+    }
+
+    const missingItems: OrderItem[] = [];
+    for (const item of order.items) {
+      const minQ = item.minQuality;
+      const currentQty = this.inventoryAccess?.getItemCount(item.itemId, minQ) || 0;
+      if (currentQty < item.quantity) {
+        missingItems.push({
+          itemId: item.itemId,
+          quantity: item.quantity - currentQty,
+          minQuality: minQ
+        });
+      }
+    }
+
+    return { canSubmit: missingItems.length === 0, missingItems };
+  }
+
+  submitFestivalOrder(orderId: string): {
+    success: boolean;
+    message?: string;
+    coins?: number;
+    reputation?: number;
+    rareSeedId?: string;
+    rareSeedQuantity?: number;
+  } {
+    const order = getFestivalOrderById(orderId);
+    if (!order) {
+      return { success: false, message: '节日订单不存在' };
+    }
+
+    if (this.state.completedFestivalOrders.includes(orderId)) {
+      return { success: false, message: '节日订单已完成' };
+    }
+
+    if (!this.state.unlockedFestivalOrders.includes(orderId)) {
+      return { success: false, message: '节日订单未解锁' };
+    }
+
+    const { canSubmit, missingItems } = this.canSubmitFestivalOrder(orderId);
+    if (!canSubmit) {
+      const missingNames = missingItems.map(m => {
+        const item = getItem(m.itemId);
+        return `${item?.name || m.itemId} x${m.quantity}`;
+      }).join('，');
+      return { success: false, message: `物品不足：${missingNames}` };
+    }
+
+    for (const item of order.items) {
+      if (this.inventoryAccess) {
+        if (!this.inventoryAccess.removeItem(item.itemId, item.quantity, item.minQuality)) {
+          return { success: false, message: '扣除物品失败' };
+        }
+      }
+    }
+
+    if (this.rewardAccess) {
+      this.rewardAccess.addCoins(order.reward.coins);
+      this.rewardAccess.addReputation(order.reward.reputation);
+    }
+
+    this.completeFestivalOrder(orderId);
+
+    let rareSeedId: string | undefined;
+    let rareSeedQuantity: number | undefined;
+
+    if (order.reward.rareSeedId && order.reward.rareSeedQuantity && this.rewardAccess) {
+      if (this.rewardAccess.addItem(order.reward.rareSeedId, order.reward.rareSeedQuantity)) {
+        rareSeedId = order.reward.rareSeedId;
+        rareSeedQuantity = order.reward.rareSeedQuantity;
+      }
+    }
+
+    return {
+      success: true,
+      coins: order.reward.coins,
+      reputation: order.reward.reputation,
+      rareSeedId,
+      rareSeedQuantity
+    };
   }
 
   completeFestivalOrder(orderId: string): boolean {

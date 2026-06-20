@@ -3,11 +3,12 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useGameStore } from '../game/stores/gameStore';
 import { getItem } from '../game/data/items';
 import { getVillagerById, TIER_CONFIG, REPUTATION_LEVELS } from '../game/data/orders';
-import type { Order, OrderTier, QualityGrade } from '../game/types/game';
+import { FESTIVALS } from '../game/data/festivalGifts';
+import type { Order, OrderTier, QualityGrade, FestivalExclusiveOrder } from '../game/types/game';
 import { DAY_DURATION, QUALITY_COLORS, QUALITY_NAMES } from '../game/types/game';
 
 const gameStore = useGameStore();
-const activeTab = ref<'active' | 'history'>('active');
+const activeTab = ref<'active' | 'history' | 'festival'>('active');
 const tick = ref(0);
 let timer: number | null = null;
 
@@ -34,6 +35,11 @@ const orders = computed(() => {
     ...gameStore.orders.getCompletedOrders(),
     ...gameStore.orders.getFailedOrders()
   ].sort((a, b) => b.createdAt - a.createdAt);
+});
+
+const festivalOrders = computed((): FestivalExclusiveOrder[] => {
+  tick.value;
+  return gameStore.getAvailableFestivalOrders() || [];
 });
 
 const reputation = computed(() => gameStore.reputation);
@@ -113,12 +119,26 @@ const getMissingItems = (order: Order) => {
   return result.missingItems;
 };
 
+const canSubmitFestival = (orderId: string) => {
+  const result = gameStore.canSubmitFestivalOrder(orderId);
+  return result.canSubmit;
+};
+
+const getMissingFestivalItems = (orderId: string) => {
+  const result = gameStore.canSubmitFestivalOrder(orderId);
+  return result.missingItems;
+};
+
 const getInventoryCount = (itemId: string, minQuality?: QualityGrade) => {
   return gameStore.inventory?.getItemCount(itemId, minQuality) || 0;
 };
 
 const submit = (orderId: string) => {
   gameStore.submitOrder(orderId);
+};
+
+const submitFestival = (orderId: string) => {
+  gameStore.submitFestivalOrder(orderId);
 };
 
 const refreshOrders = () => {
@@ -191,6 +211,14 @@ const refreshOrders = () => {
         >
           📖 历史记录
         </button>
+        <button 
+          v-if="gameStore.isFestivalActive"
+          class="font-pixel text-sm px-6 py-2 border-2 border-orange-500 transition-colors"
+          :class="activeTab === 'festival' ? 'bg-orange-200' : 'bg-farm-ui-dark hover:bg-orange-200/50'"
+          @click="activeTab = 'festival'"
+        >
+          🎊 节日订单 ({{ gameStore.getFestivalOrderCount() }})
+        </button>
         <div class="flex-1"></div>
         <button 
           v-if="activeTab === 'active'"
@@ -202,186 +230,324 @@ const refreshOrders = () => {
       </div>
 
       <div class="flex-1 overflow-y-auto">
-        <div v-if="orders.length > 0" class="space-y-3">
-          <div 
-            v-for="order in orders" 
-            :key="order.id"
-            class="border-2 border-farm-wood-dark overflow-hidden"
-            :class="{
-              'bg-farm-ui-dark': order.status !== 'completed',
-              'bg-green-50': order.status === 'completed',
-              'bg-red-50': order.status === 'failed'
-            }"
-          >
+        <template v-if="activeTab === 'festival'">
+          <div v-if="festivalOrders.length > 0" class="space-y-3">
             <div 
-              class="p-3 flex items-center gap-3 border-b-2 border-farm-wood-dark"
-              :style="{ borderLeft: `4px solid ${order.isExclusive ? '#f59e0b' : getTierInfo(order.tier).color}` }"
+              v-for="order in festivalOrders" 
+              :key="order.id"
+              class="border-2 border-orange-400 overflow-hidden bg-orange-50"
             >
-              <span class="text-3xl">{{ getVillager(order.villagerId)?.avatar || '👤' }}</span>
-              <div class="flex-1">
-                <div class="flex items-center gap-2 flex-wrap">
-                  <span class="font-pixel text-sm text-farm-wood-dark">
-                    {{ getVillager(order.villagerId)?.name || '村民' }}
-                  </span>
-                  <span 
-                    v-if="order.isExclusive"
-                    class="font-pixel text-[10px] px-2 py-0.5 bg-gradient-to-r from-amber-400 to-yellow-500 text-amber-950 border border-amber-600 shadow-md animate-pulse"
-                  >
-                    ⭐ 专属
-                  </span>
-                  <span 
-                    class="font-pixel text-[10px] px-2 py-0.5 text-white"
-                    :style="{ backgroundColor: order.isExclusive ? '#f59e0b' : getTierInfo(order.tier).color }"
-                  >
-                    {{ order.isExclusive ? '限定' : getTierInfo(order.tier).name }}
-                  </span>
-                </div>
-                <div 
-                  v-if="order.isExclusive && order.exclusiveName" 
-                  class="font-pixel text-[11px] text-amber-700 font-bold mt-0.5"
-                >
-                  📜 {{ order.exclusiveName }}
-                </div>
-                <div 
-                  v-if="order.isExclusive && order.exclusiveDescription" 
-                  class="font-pixel text-[9px] text-farm-wood-dark/70 mt-0.5 italic"
-                >
-                  "{{ order.exclusiveDescription }}"
-                </div>
-                <div class="font-pixel text-[10px] text-farm-wood-dark/60 mt-0.5">
-                  订单号: {{ order.id.slice(-8) }}
-                </div>
-              </div>
-              <div class="text-right min-w-[90px]">
-                <template v-if="order.status === 'active'">
-                  <div 
-                    class="font-pixel text-sm"
-                    :class="{
-                      'text-red-600 animate-pulse': getUrgency(order) === 'urgent',
-                      'text-orange-500': getUrgency(order) === 'warning',
-                      'text-farm-wood-dark': getUrgency(order) === 'normal',
-                      'text-gray-500 line-through': getUrgency(order) === 'expired'
-                    }"
-                  >
-                    ⏰ {{ formatTimeRemaining(order.deadline).text }}
-                  </div>
-                  <div 
-                    v-if="formatTimeRemaining(order.deadline).subText" 
-                    class="font-pixel text-[10px] text-farm-wood-dark/60 mt-0.5"
-                  >
-                    {{ formatTimeRemaining(order.deadline).subText }}
-                  </div>
-                  <div 
-                    v-if="formatTimeRemaining(order.deadline).showProgress"
-                    class="w-full h-1.5 bg-farm-wood-dark/20 mt-1.5 overflow-hidden rounded-none"
-                  >
-                    <div 
-                      class="h-full transition-all duration-1000 ease-linear"
-                      :class="{
-                        'bg-red-500': getUrgency(order) === 'urgent' || getUrgency(order) === 'expired',
-                        'bg-orange-400': getUrgency(order) === 'warning',
-                        'bg-green-500': getUrgency(order) === 'normal'
-                      }"
-                      :style="{ width: `${formatTimeRemaining(order.deadline).progress}%` }"
-                    ></div>
-                  </div>
-                </template>
-                <div v-else-if="order.status === 'completed'" class="font-pixel text-xs text-green-600">
-                  ✅ 已完成
-                </div>
-                <div v-else class="font-pixel text-xs text-red-600">
-                  ❌ 已违约
-                </div>
-              </div>
-            </div>
-
-            <div class="p-3">
-              <div class="mb-3">
-                <div class="font-pixel text-[10px] text-farm-wood-dark/70 mb-2">📦 需要交付:</div>
-                <div class="space-y-1">
-                  <div 
-                    v-for="item in order.items" 
-                    :key="item.itemId"
-                    class="flex items-center gap-3 p-2 bg-farm-ui border border-farm-wood-dark/50"
-                  >
-                    <span class="text-2xl">{{ getItemData(item.itemId)?.icon || '❓' }}</span>
-                    <div class="flex-1">
-                      <div class="font-pixel text-xs text-farm-wood-dark">
-                        {{ getItemData(item.itemId)?.name || item.itemId }}
-                        <span 
-                          v-if="item.minQuality"
-                          class="ml-1 text-[9px]"
-                          :style="{ color: QUALITY_COLORS[item.minQuality] }"
-                        >
-                          {{ '★'.repeat(item.minQuality) }}起
-                        </span>
-                      </div>
-                    </div>
-                    <div class="font-pixel text-xs">
-                      <span 
-                        v-if="order.status === 'active'"
-                        :class="getInventoryCount(item.itemId, item.minQuality) >= item.quantity ? 'text-green-600' : 'text-red-600'"
-                      >
-                        {{ getInventoryCount(item.itemId, item.minQuality) }}
-                      </span>
-                      <span class="text-farm-wood-dark"> / {{ item.quantity }}</span>
-                    </div>
-                  </div>
-                </div>
-                <div 
-                  v-if="order.status === 'active' && getMissingItems(order).length > 0" 
-                  class="mt-2 font-pixel text-[10px] text-red-600"
-                >
-                  缺少: 
-                  <span v-for="(m, i) in getMissingItems(order)" :key="m.itemId">
-                    {{ getItemData(m.itemId)?.name }} x{{ m.quantity }}<span v-if="i < getMissingItems(order).length - 1">，</span>
-                  </span>
-                </div>
-              </div>
-
-              <div class="flex items-center justify-between pt-2 border-t border-farm-wood-dark/30">
-                <div class="space-y-1">
-                  <div class="font-pixel text-[10px] text-farm-wood-dark/70">🎁 奖励:</div>
-                  <div class="flex items-center gap-3 flex-wrap">
-                    <span class="font-pixel text-xs text-farm-gold-dark">
-                      💰 {{ order.reward.coins }}
-                    </span>
-                    <span class="font-pixel text-xs text-purple-600">
-                      ⭐ +{{ order.reward.reputation }}
+              <div 
+                class="p-3 flex items-center gap-3 border-b-2 border-orange-300"
+                :style="{ borderLeft: '4px solid #ff9800' }"
+              >
+                <span class="text-3xl">{{ getVillager(order.villagerId)?.avatar || '👤' }}</span>
+                <div class="flex-1">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-pixel text-sm text-farm-wood-dark">
+                      {{ getVillager(order.villagerId)?.name || '村民' }}
                     </span>
                     <span 
-                      v-if="order.reward.rareSeedId && order.reward.rareSeedQuantity" 
-                      class="font-pixel text-xs text-blue-600"
+                      class="font-pixel text-[10px] px-2 py-0.5 bg-gradient-to-r from-orange-400 to-amber-500 text-white border border-orange-600 shadow-md animate-pulse"
                     >
-                      {{ getItemData(order.reward.rareSeedId)?.icon }}
-                      {{ getItemData(order.reward.rareSeedId)?.name }} x{{ order.reward.rareSeedQuantity }}
+                      🎊 节日限定
+                    </span>
+                    <span 
+                      class="font-pixel text-[10px] px-2 py-0.5 text-white"
+                      style="background-color: #ff9800"
+                    >
+                      {{ FESTIVALS[order.festivalId]?.name || '节日' }}
+                    </span>
+                  </div>
+                  <div class="font-pixel text-[11px] text-orange-700 font-bold mt-0.5">
+                    📜 {{ order.name }}
+                  </div>
+                  <div class="font-pixel text-[9px] text-farm-wood-dark/70 mt-0.5 italic">
+                    "{{ order.description }}"
+                  </div>
+                  <div class="font-pixel text-[10px] text-farm-wood-dark/60 mt-0.5">
+                    订单号: {{ order.id.slice(-8) }}
+                  </div>
+                </div>
+                <div class="text-right min-w-[90px]">
+                  <div class="font-pixel text-xs text-orange-600">
+                    🎊 节日进行中
+                  </div>
+                  <div class="font-pixel text-[10px] text-orange-500 mt-0.5">
+                    需阶段: STAGE_{{ order.unlockStage }}
+                  </div>
+                </div>
+              </div>
+
+              <div class="p-3">
+                <div class="mb-3">
+                  <div class="font-pixel text-[10px] text-farm-wood-dark/70 mb-2">📦 需要交付:</div>
+                  <div class="space-y-1">
+                    <div 
+                      v-for="item in order.items" 
+                      :key="item.itemId"
+                      class="flex items-center gap-3 p-2 bg-farm-ui border border-farm-wood-dark/50"
+                    >
+                      <span class="text-2xl">{{ getItemData(item.itemId)?.icon || '❓' }}</span>
+                      <div class="flex-1">
+                        <div class="font-pixel text-xs text-farm-wood-dark">
+                          {{ getItemData(item.itemId)?.name || item.itemId }}
+                          <span 
+                            v-if="item.minQuality"
+                            class="ml-1 text-[9px]"
+                            :style="{ color: QUALITY_COLORS[item.minQuality] }"
+                          >
+                            {{ '★'.repeat(item.minQuality) }}起
+                          </span>
+                        </div>
+                      </div>
+                      <div class="font-pixel text-xs">
+                        <span 
+                          :class="getInventoryCount(item.itemId, item.minQuality) >= item.quantity ? 'text-green-600' : 'text-red-600'"
+                        >
+                          {{ getInventoryCount(item.itemId, item.minQuality) }}
+                        </span>
+                        <span class="text-farm-wood-dark"> / {{ item.quantity }}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div 
+                    v-if="getMissingFestivalItems(order.id).length > 0" 
+                    class="mt-2 font-pixel text-[10px] text-red-600"
+                  >
+                    缺少: 
+                    <span v-for="(m, i) in getMissingFestivalItems(order.id)" :key="m.itemId">
+                      {{ getItemData(m.itemId)?.name }} x{{ m.quantity }}<span v-if="i < getMissingFestivalItems(order.id).length - 1">，</span>
                     </span>
                   </div>
                 </div>
-                <button 
-                  v-if="order.status === 'active'"
-                  class="font-pixel text-xs px-5 py-2 border-2 border-farm-wood-dark transition-colors"
-                  :class="canSubmit(order) 
-                    ? 'bg-farm-gold hover:bg-farm-gold-dark text-farm-wood-dark' 
-                    : 'bg-gray-400 text-gray-600 cursor-not-allowed'"
-                  :disabled="!canSubmit(order)"
-                  @click="submit(order.id)"
-                >
-                  交付
-                </button>
+
+                <div class="flex items-center justify-between pt-2 border-t border-farm-wood-dark/30">
+                  <div class="space-y-1">
+                    <div class="font-pixel text-[10px] text-farm-wood-dark/70">🎁 奖励:</div>
+                    <div class="flex items-center gap-3 flex-wrap">
+                      <span class="font-pixel text-xs text-farm-gold-dark">
+                        💰 {{ order.reward.coins }}
+                      </span>
+                      <span class="font-pixel text-xs text-purple-600">
+                        ⭐ +{{ order.reward.reputation }}
+                      </span>
+                      <span 
+                        v-if="order.reward.rareSeedId && order.reward.rareSeedQuantity" 
+                        class="font-pixel text-xs text-blue-600"
+                      >
+                        {{ getItemData(order.reward.rareSeedId)?.icon }}
+                        {{ getItemData(order.reward.rareSeedId)?.name }} x{{ order.reward.rareSeedQuantity }}
+                      </span>
+                    </div>
+                  </div>
+                  <button 
+                    class="font-pixel text-xs px-5 py-2 border-2 border-farm-wood-dark transition-colors"
+                    :class="canSubmitFestival(order.id) 
+                      ? 'bg-orange-400 hover:bg-orange-500 text-white' 
+                      : 'bg-gray-400 text-gray-600 cursor-not-allowed'"
+                    :disabled="!canSubmitFestival(order.id)"
+                    @click="submitFestival(order.id)"
+                  >
+                    交付
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-        <div v-else class="text-center py-12">
-          <span class="text-5xl">📭</span>
-          <p class="font-pixel text-sm text-farm-wood-dark mt-4">
-            {{ activeTab === 'active' ? '当前没有进行中的委托' : '还没有任何历史记录' }}
-          </p>
-          <p class="font-pixel text-[10px] text-farm-wood-dark/60 mt-2">
-            {{ activeTab === 'active' ? '新的一天会自动刷新委托哦~' : '完成村民委托赚取金币和信誉吧！' }}
-          </p>
-        </div>
+          <div v-else class="text-center py-12">
+            <span class="text-5xl">📭</span>
+            <p class="font-pixel text-sm text-farm-wood-dark mt-4">
+              当前没有可接取的节日订单
+            </p>
+            <p class="font-pixel text-[10px] text-farm-wood-dark/60 mt-2">
+              提升与村民的好感度以解锁更多节日订单！
+            </p>
+          </div>
+        </template>
+
+        <template v-else>
+          <div v-if="orders.length > 0" class="space-y-3">
+            <div 
+              v-for="order in orders" 
+              :key="order.id"
+              class="border-2 border-farm-wood-dark overflow-hidden"
+              :class="{
+                'bg-farm-ui-dark': order.status !== 'completed',
+                'bg-green-50': order.status === 'completed',
+                'bg-red-50': order.status === 'failed'
+              }"
+            >
+              <div 
+                class="p-3 flex items-center gap-3 border-b-2 border-farm-wood-dark"
+                :style="{ borderLeft: `4px solid ${order.isExclusive ? '#f59e0b' : getTierInfo(order.tier).color}` }"
+              >
+                <span class="text-3xl">{{ getVillager(order.villagerId)?.avatar || '👤' }}</span>
+                <div class="flex-1">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-pixel text-sm text-farm-wood-dark">
+                      {{ getVillager(order.villagerId)?.name || '村民' }}
+                    </span>
+                    <span 
+                      v-if="order.isExclusive"
+                      class="font-pixel text-[10px] px-2 py-0.5 bg-gradient-to-r from-amber-400 to-yellow-500 text-amber-950 border border-amber-600 shadow-md animate-pulse"
+                    >
+                      ⭐ 专属
+                    </span>
+                    <span 
+                      class="font-pixel text-[10px] px-2 py-0.5 text-white"
+                      :style="{ backgroundColor: order.isExclusive ? '#f59e0b' : getTierInfo(order.tier).color }"
+                    >
+                      {{ order.isExclusive ? '限定' : getTierInfo(order.tier).name }}
+                    </span>
+                  </div>
+                  <div 
+                    v-if="order.isExclusive && order.exclusiveName" 
+                    class="font-pixel text-[11px] text-amber-700 font-bold mt-0.5"
+                  >
+                    📜 {{ order.exclusiveName }}
+                  </div>
+                  <div 
+                    v-if="order.isExclusive && order.exclusiveDescription" 
+                    class="font-pixel text-[9px] text-farm-wood-dark/70 mt-0.5 italic"
+                  >
+                    "{{ order.exclusiveDescription }}"
+                  </div>
+                  <div class="font-pixel text-[10px] text-farm-wood-dark/60 mt-0.5">
+                    订单号: {{ order.id.slice(-8) }}
+                  </div>
+                </div>
+                <div class="text-right min-w-[90px]">
+                  <template v-if="order.status === 'active'">
+                    <div 
+                      class="font-pixel text-sm"
+                      :class="{
+                        'text-red-600 animate-pulse': getUrgency(order) === 'urgent',
+                        'text-orange-500': getUrgency(order) === 'warning',
+                        'text-farm-wood-dark': getUrgency(order) === 'normal',
+                        'text-gray-500 line-through': getUrgency(order) === 'expired'
+                      }"
+                    >
+                      ⏰ {{ formatTimeRemaining(order.deadline).text }}
+                    </div>
+                    <div 
+                      v-if="formatTimeRemaining(order.deadline).subText" 
+                      class="font-pixel text-[10px] text-farm-wood-dark/60 mt-0.5"
+                    >
+                      {{ formatTimeRemaining(order.deadline).subText }}
+                    </div>
+                    <div 
+                      v-if="formatTimeRemaining(order.deadline).showProgress"
+                      class="w-full h-1.5 bg-farm-wood-dark/20 mt-1.5 overflow-hidden rounded-none"
+                    >
+                      <div 
+                        class="h-full transition-all duration-1000 ease-linear"
+                        :class="{
+                          'bg-red-500': getUrgency(order) === 'urgent' || getUrgency(order) === 'expired',
+                          'bg-orange-400': getUrgency(order) === 'warning',
+                          'bg-green-500': getUrgency(order) === 'normal'
+                        }"
+                        :style="{ width: `${formatTimeRemaining(order.deadline).progress}%` }"
+                      ></div>
+                    </div>
+                  </template>
+                  <div v-else-if="order.status === 'completed'" class="font-pixel text-xs text-green-600">
+                    ✅ 已完成
+                  </div>
+                  <div v-else class="font-pixel text-xs text-red-600">
+                    ❌ 已违约
+                  </div>
+                </div>
+              </div>
+
+              <div class="p-3">
+                <div class="mb-3">
+                  <div class="font-pixel text-[10px] text-farm-wood-dark/70 mb-2">📦 需要交付:</div>
+                  <div class="space-y-1">
+                    <div 
+                      v-for="item in order.items" 
+                      :key="item.itemId"
+                      class="flex items-center gap-3 p-2 bg-farm-ui border border-farm-wood-dark/50"
+                    >
+                      <span class="text-2xl">{{ getItemData(item.itemId)?.icon || '❓' }}</span>
+                      <div class="flex-1">
+                        <div class="font-pixel text-xs text-farm-wood-dark">
+                          {{ getItemData(item.itemId)?.name || item.itemId }}
+                          <span 
+                            v-if="item.minQuality"
+                            class="ml-1 text-[9px]"
+                            :style="{ color: QUALITY_COLORS[item.minQuality] }"
+                          >
+                            {{ '★'.repeat(item.minQuality) }}起
+                          </span>
+                        </div>
+                      </div>
+                      <div class="font-pixel text-xs">
+                        <span 
+                          v-if="order.status === 'active'"
+                          :class="getInventoryCount(item.itemId, item.minQuality) >= item.quantity ? 'text-green-600' : 'text-red-600'"
+                        >
+                          {{ getInventoryCount(item.itemId, item.minQuality) }}
+                        </span>
+                        <span class="text-farm-wood-dark"> / {{ item.quantity }}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div 
+                    v-if="order.status === 'active' && getMissingItems(order).length > 0" 
+                    class="mt-2 font-pixel text-[10px] text-red-600"
+                  >
+                    缺少: 
+                    <span v-for="(m, i) in getMissingItems(order)" :key="m.itemId">
+                      {{ getItemData(m.itemId)?.name }} x{{ m.quantity }}<span v-if="i < getMissingItems(order).length - 1">，</span>
+                    </span>
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-2 border-t border-farm-wood-dark/30">
+                  <div class="space-y-1">
+                    <div class="font-pixel text-[10px] text-farm-wood-dark/70">🎁 奖励:</div>
+                    <div class="flex items-center gap-3 flex-wrap">
+                      <span class="font-pixel text-xs text-farm-gold-dark">
+                        💰 {{ order.reward.coins }}
+                      </span>
+                      <span class="font-pixel text-xs text-purple-600">
+                        ⭐ +{{ order.reward.reputation }}
+                      </span>
+                      <span 
+                        v-if="order.reward.rareSeedId && order.reward.rareSeedQuantity" 
+                        class="font-pixel text-xs text-blue-600"
+                      >
+                        {{ getItemData(order.reward.rareSeedId)?.icon }}
+                        {{ getItemData(order.reward.rareSeedId)?.name }} x{{ order.reward.rareSeedQuantity }}
+                      </span>
+                    </div>
+                  </div>
+                  <button 
+                    v-if="order.status === 'active'"
+                    class="font-pixel text-xs px-5 py-2 border-2 border-farm-wood-dark transition-colors"
+                    :class="canSubmit(order) 
+                      ? 'bg-farm-gold hover:bg-farm-gold-dark text-farm-wood-dark' 
+                      : 'bg-gray-400 text-gray-600 cursor-not-allowed'"
+                    :disabled="!canSubmit(order)"
+                    @click="submit(order.id)"
+                  >
+                    交付
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-else class="text-center py-12">
+            <span class="text-5xl">📭</span>
+            <p class="font-pixel text-sm text-farm-wood-dark mt-4">
+              {{ activeTab === 'active' ? '当前没有进行中的委托' : '还没有任何历史记录' }}
+            </p>
+            <p class="font-pixel text-[10px] text-farm-wood-dark/60 mt-2">
+              {{ activeTab === 'active' ? '新的一天会自动刷新委托哦~' : '完成村民委托赚取金币和信誉吧！' }}
+            </p>
+          </div>
+        </template>
       </div>
     </div>
   </div>

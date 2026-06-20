@@ -422,7 +422,8 @@ export const useGameStore = defineStore('game', () => {
           const matches = products.filter(p => p.itemId === itemId);
           if (matches.length === 0) return 3 as QualityGrade;
           return Math.max(...matches.map(m => m.quality)) as QualityGrade;
-        }
+        },
+        getItemCount: (itemId: string, minQuality?: QualityGrade) => inventory.value?.getItemCount(itemId, minQuality) ?? 0
       });
       festivalGift.value.setRewardAccess({
         addCoins: (amount: number) => {
@@ -831,7 +832,8 @@ export const useGameStore = defineStore('game', () => {
           const matches = products.filter(p => p.itemId === itemId);
           if (matches.length === 0) return 3 as QualityGrade;
           return Math.max(...matches.map(m => m.quality)) as QualityGrade;
-        }
+        },
+        getItemCount: (itemId: string, minQuality?: QualityGrade) => inventory.value?.getItemCount(itemId, minQuality) ?? 0
       });
       festivalGift.value.setRewardAccess({
         addCoins: (amount: number) => {
@@ -2292,6 +2294,23 @@ export const useGameStore = defineStore('game', () => {
         saveGame();
       }
     }
+
+    if (festivalGift.value && mapGrid.value) {
+      const currentDay = mapGrid.value.getDay();
+      const isFestivalDay = currentDay === 10;
+      const isCurrentlyFestival = festivalGift.value.isFestivalActive();
+
+      if (isCurrentlyFestival && !isFestivalDay) {
+        festivalGift.value.endFestival();
+        addNotification('🎊 节日已圆满结束！', 'info');
+        if (statistics.value) {
+          statistics.value.recordFestivalParticipated();
+        }
+        saveGame();
+      }
+
+      checkFestivalStart();
+    }
   }
 
   function openMiningModal() {
@@ -2688,6 +2707,54 @@ export const useGameStore = defineStore('game', () => {
       const festConfig = FESTIVALS[result];
       addNotification(`${festConfig.icon} ${festConfig.name}到了！${festConfig.description}`, 'success');
     }
+  }
+
+  function endFestival() {
+    if (!festivalGift.value) return;
+    festivalGift.value.endFestival();
+  }
+
+  function getAvailableFestivalOrders() {
+    return festivalGift.value?.getAvailableFestivalOrdersForCurrentFestival() ?? [];
+  }
+
+  function canSubmitFestivalOrder(orderId: string) {
+    if (!festivalGift.value) {
+      return { canSubmit: false, missingItems: [] };
+    }
+    return festivalGift.value.canSubmitFestivalOrder(orderId);
+  }
+
+  function submitFestivalOrder(orderId: string) {
+    if (!festivalGift.value || !gameState.value || !shop.value || !orders.value) {
+      return { success: false, message: '系统未初始化' };
+    }
+
+    const result = festivalGift.value.submitFestivalOrder(orderId);
+    
+    if (result.success) {
+      gameState.value.coins = shop.value.getCoins();
+      gameState.value.reputation = orders.value.getReputation();
+      
+      if (result.rareSeedId && result.rareSeedQuantity) {
+        const item = getItem(result.rareSeedId);
+        addNotification(`🌱 获得稀有种子：${item?.name || result.rareSeedId} x${result.rareSeedQuantity}`, 'success');
+      }
+      addNotification(`🎉 节日订单完成！+${result.coins}金币 +${result.reputation}信誉`, 'success');
+    } else {
+      addNotification(result.message || '提交失败！', 'error');
+    }
+    checkAchievements();
+    saveGame();
+    return result;
+  }
+
+  function isFestivalOrderCompleted(orderId: string) {
+    return festivalGift.value?.isFestivalOrderCompleted(orderId) ?? false;
+  }
+
+  function getFestivalOrderCount() {
+    return festivalGift.value?.getAvailableFestivalOrdersForCurrentFestival().length ?? 0;
   }
 
   function openHireWorkerPanel() {
@@ -3091,6 +3158,12 @@ export const useGameStore = defineStore('game', () => {
     giveFestivalGiftToVillager,
     advanceFestivalDialogue,
     getCurrentFestivalDialogue,
-    checkFestivalStart
+    checkFestivalStart,
+    endFestival,
+    getAvailableFestivalOrders,
+    canSubmitFestivalOrder,
+    submitFestivalOrder,
+    isFestivalOrderCompleted,
+    getFestivalOrderCount
   };
 });

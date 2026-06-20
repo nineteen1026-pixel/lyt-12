@@ -37,6 +37,7 @@ const giftableItems = computed(() => {
     i.itemId.includes('_product') || i.itemId.includes('_seed')
   )).map(i => ({
     ...i,
+    quality: (i.quality ?? 3) as QualityGrade,
     itemData: getItem(i.itemId)
   })).filter(i => i.itemData);
 });
@@ -51,9 +52,10 @@ const festivalGiftableItems = computed(() => {
     i.itemId.includes('_product') || i.itemId === 'egg' || i.itemId === 'milk'
   )).map(i => {
     const itemData = getItem(i.itemId);
+    const quality = (i.quality ?? 3) as QualityGrade;
     const isPreferred = preference?.preferredItems.includes(i.itemId) ?? false;
     const isDisliked = preference?.dislikedItems.includes(i.itemId) ?? false;
-    return { ...i, itemData, isPreferred, isDisliked };
+    return { ...i, quality, itemData, isPreferred, isDisliked };
   }).filter(i => i.itemData);
 });
 
@@ -94,9 +96,9 @@ const openGiftPanel = () => {
   festivalDialogueView.value = false;
 };
 
-const giveGift = (itemId: string) => {
+const giveGift = (itemId: string, quality: QualityGrade = 3) => {
   if (!selectedVillagerId.value) return;
-  const result = gameStore.giveGiftToVillager(selectedVillagerId.value, itemId, 1);
+  const result = gameStore.giveGiftToVillager(selectedVillagerId.value, itemId, quality);
   if (result.success) {
     giftView.value = false;
   }
@@ -442,13 +444,16 @@ const getSpeakerName = (speaker: string) => {
                 <div class="grid grid-cols-4 gap-2">
                   <div
                     v-for="g in giftableItems"
-                    :key="g.itemId"
+                    :key="g.itemId + '_' + g.quality"
                     class="p-2 bg-farm-ui border-2 border-farm-wood-dark/50 hover:bg-farm-gold/60 cursor-pointer transition-all flex flex-col items-center"
-                    @click="giveGift(g.itemId)"
+                    @click="giveGift(g.itemId, g.quality)"
                   >
                     <span class="text-2xl">{{ g.itemData?.icon }}</span>
                     <span class="font-pixel text-[9px] text-farm-wood-dark mt-1 text-center truncate w-full">
                       {{ g.itemData?.name }}
+                    </span>
+                    <span class="font-pixel text-[8px]" :style="{ color: g.quality >= 4 ? '#9c27b0' : g.quality >= 3 ? '#2196f3' : '#999' }">
+                      {{ getQualityLabel(g.quality) }}
                     </span>
                     <span class="font-pixel text-[8px] text-farm-wood-dark/60">x{{ g.quantity }}</span>
                   </div>
