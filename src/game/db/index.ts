@@ -1,6 +1,6 @@
 import { openDB, IDBPDatabase } from 'idb';
 import { DB_CONFIG, STORE_CONFIGS, INITIAL_GAME_STATE, INITIAL_REPUTATION, type DBStores } from './schema';
-import type { GameState, Plot, Animal, Pet, InventoryItem, Order, Building, GameStats, AchievementProgress, CodexEntry, SkillTreeState, VillagerRelationsState, FarmHireState, AuctionState, InsuranceState } from '../types/game';
+import type { GameState, Plot, Animal, Pet, InventoryItem, Order, Building, GameStats, AchievementProgress, CodexEntry, SkillTreeState, VillagerRelationsState, FarmHireState, AuctionState, InsuranceState, FestivalGiftState } from '../types/game';
 import { GRID_WIDTH, GRID_HEIGHT, INITIAL_UNLOCKED } from '../types/game';
 import { INITIAL_STATS } from '../modules/Statistics';
 import { INITIAL_SKILL_TREE_STATE } from '../modules/SkillTree';
@@ -9,6 +9,7 @@ import { CODEX_ENTRIES } from '../data/codex';
 import { createInitialVillagerRelations } from '../data/villagers';
 import { createInitialFarmHireState } from '../modules/FarmHire';
 import { createInitialAuctionState } from '../data/auction';
+import { createInitialFestivalGiftState } from '../modules/FestivalGift';
 
 class GameDatabase {
   private db: IDBPDatabase<DBStores> | null = null;
@@ -352,6 +353,22 @@ class GameDatabase {
     }
   }
 
+  async saveFestivalGift(festivalGift: FestivalGiftState): Promise<void> {
+    const db = this.ensureDB();
+    const clone = JSON.parse(JSON.stringify(festivalGift));
+    clone.id = 'main';
+    await db.put('festivalGift', clone);
+  }
+
+  async getFestivalGift(): Promise<FestivalGiftState | undefined> {
+    const db = this.ensureDB();
+    try {
+      return await db.get('festivalGift', 'main');
+    } catch (e) {
+      return undefined;
+    }
+  }
+
   async initializeNewGame(): Promise<{
     state: GameState;
     plots: Plot[];
@@ -368,6 +385,7 @@ class GameDatabase {
     farmHire: FarmHireState;
     auction: AuctionState;
     cropInsurance: InsuranceState;
+    festivalGift: FestivalGiftState;
   }> {
     const now = Date.now();
     const state: GameState = {
@@ -446,6 +464,7 @@ class GameDatabase {
       pendingClaim: null,
       claimHistory: []
     };
+    const festivalGift: FestivalGiftState = createInitialFestivalGiftState();
 
     await this.saveGameState(state);
     await this.saveAllPlots(plots);
@@ -462,8 +481,9 @@ class GameDatabase {
     await this.saveFarmHire(farmHire);
     await this.saveAuction(auction);
     await this.saveCropInsurance(cropInsurance);
+    await this.saveFestivalGift(festivalGift);
 
-    return { state, plots, animals, pets, inventory, orders, buildings, stats, achievements, codex, skillTree, villagerRelations, farmHire, auction, cropInsurance };
+    return { state, plots, animals, pets, inventory, orders, buildings, stats, achievements, codex, skillTree, villagerRelations, farmHire, auction, cropInsurance, festivalGift };
   }
 
   async loadGame(): Promise<{
@@ -482,6 +502,7 @@ class GameDatabase {
     farmHire?: FarmHireState;
     auction?: AuctionState;
     cropInsurance?: InsuranceState;
+    festivalGift?: FestivalGiftState;
   } | null> {
     const state = await this.getGameState();
     if (!state) {
@@ -533,8 +554,9 @@ class GameDatabase {
     const farmHire = await this.getFarmHire();
     const auction = await this.getAuction();
     const cropInsurance = await this.getCropInsurance();
+    const festivalGift = await this.getFestivalGift();
 
-    return { state, plots, animals, pets, inventory, orders, buildings, stats, achievements, codex, skillTree, villagerRelations, farmHire, auction, cropInsurance };
+    return { state, plots, animals, pets, inventory, orders, buildings, stats, achievements, codex, skillTree, villagerRelations, farmHire, auction, cropInsurance, festivalGift };
   }
 
   async saveCompleteGame(
@@ -552,7 +574,8 @@ class GameDatabase {
     villagerRelations?: VillagerRelationsState,
     farmHire?: FarmHireState,
     auction?: AuctionState,
-    cropInsurance?: InsuranceState
+    cropInsurance?: InsuranceState,
+    festivalGift?: FestivalGiftState
   ): Promise<void> {
     await this.saveGameState(state);
     await this.saveAllPlots(plots);
@@ -585,6 +608,9 @@ class GameDatabase {
     }
     if (cropInsurance) {
       await this.saveCropInsurance(cropInsurance);
+    }
+    if (festivalGift) {
+      await this.saveFestivalGift(festivalGift);
     }
   }
 

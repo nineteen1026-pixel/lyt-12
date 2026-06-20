@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed, toRaw } from 'vue';
-import type { GameState, Plot, Animal, Pet, PetType, InventoryItem, ToolType, Season, WeatherType, WeatherState, WeatherSeverity, WeatherWarning, Order, Building, BuildingType, BuildingConfig, GameStats, AchievementProgress, CodexEntry, QualityGrade, SkillTreeState, SkillEffectBonus, SkillNode, LevelUpResult, PetCompanionBonus, AffinityStage, DialogueResult, ExclusiveOrderTemplate, FarmHireState, FarmWorkerTaskType, AuctionItem, AuctionBidResult, AuctionSettleResult } from '../types/game';
+import type { GameState, Plot, Animal, Pet, PetType, InventoryItem, ToolType, Season, WeatherType, WeatherState, WeatherSeverity, WeatherWarning, Order, Building, BuildingType, BuildingConfig, GameStats, AchievementProgress, CodexEntry, QualityGrade, SkillTreeState, SkillEffectBonus, SkillNode, LevelUpResult, PetCompanionBonus, AffinityStage, DialogueResult, ExclusiveOrderTemplate, FarmHireState, FarmWorkerTaskType, AuctionItem, AuctionBidResult, AuctionSettleResult, FestivalType, FestivalGiftState, FestivalDialogueNode, FestivalGiftResult } from '../types/game';
 import { QUALITY_PRICE_MULTIPLIER, QUALITY_NAMES, DAY_DURATION } from '../types/game';
 import { MapGrid } from '../modules/MapGrid';
 import { CropGrowth } from '../modules/CropGrowth';
@@ -22,6 +22,8 @@ import { VillagerRelations, type DialogueAdvanceResult } from '../modules/Villag
 import { FarmHire, createInitialFarmHireState } from '../modules/FarmHire';
 import { AuctionSystem } from '../modules/Auction';
 import { CropInsurance } from '../modules/CropInsurance';
+import { FestivalGift, type FestivalVillagerAccess, type FestivalInventoryAccess, type FestivalRewardAccess, type FestivalStatisticsAccess } from '../modules/FestivalGift';
+import { FESTIVALS, getVillagerFestivalPreference, getFestivalById } from '../data/festivalGifts';
 import type { InsurancePlanType, InsuranceState, InsurancePayoutResult } from '../types/game';
 import { gameDB } from '../db';
 import { getItem } from '../data/items';
@@ -59,6 +61,7 @@ export const useGameStore = defineStore('game', () => {
   const farmHire = ref<FarmHire | null>(null);
   const auction = ref<AuctionSystem | null>(null);
   const cropInsurance = ref<CropInsurance | null>(null);
+  const festivalGift = ref<FestivalGift | null>(null);
   const showInsurance = ref(false);
   const selectedTool = ref<ToolType>(null);
   const selectedSeed = ref<string | null>(null);
@@ -154,6 +157,11 @@ export const useGameStore = defineStore('game', () => {
   const isInsured = computed(() => cropInsurance.value?.isInsured() ?? false);
   const activeInsurancePlan = computed<InsurancePlanType | null>(() => cropInsurance.value?.getActivePlan() ?? null);
   const insuranceStats = computed(() => cropInsurance.value?.getStats() ?? null);
+
+  const festivalGiftState = computed<FestivalGiftState | null>(() => festivalGift.value?.getState() ?? null);
+  const isFestivalActive = computed(() => festivalGift.value?.isFestivalActive() ?? false);
+  const currentFestivalInfo = computed(() => festivalGift.value?.getFestivalInfo() ?? null);
+  const currentFestival = computed(() => festivalGift.value?.getCurrentFestivalConfig() ?? null);
 
   const combinedBonusAccess = {
     getSkillBonus: (): SkillEffectBonus => {
@@ -394,6 +402,57 @@ export const useGameStore = defineStore('game', () => {
       cropInsurance.value.setBuildingsAccess(buildings.value);
       cropInsurance.value.setSkillAccess(combinedBonusAccess);
       cropInsurance.value.setCurrentSeason(savedGame.state.season);
+
+      festivalGift.value = new FestivalGift(savedGame.festivalGift ?? null);
+      festivalGift.value.setVillagerAccess({
+        getStage: (villagerId: string) => villagerRelations.value?.getStage(villagerId) ?? 0,
+        getAffinity: (villagerId: string) => villagerRelations.value?.getAffinity(villagerId) ?? 0,
+        addAffinity: (villagerId: string, amount: number) => villagerRelations.value?.addAffinity(villagerId, amount) ?? { stageAdvanced: false, newStage: 0, stageCodexTriggers: [], stageAchievementTriggers: [] }
+      });
+      festivalGift.value.setInventoryAccess({
+        hasItem: (itemId: string, quantity: number, minQuality?: QualityGrade) => inventory.value?.hasItem(itemId, quantity, minQuality) ?? false,
+        removeItem: (itemId: string, quantity: number, quality?: QualityGrade) => inventory.value?.removeItem(itemId, quantity, quality) ?? false,
+        getItemQuality: (itemId: string) => {
+          const products = inventory.value?.getProducts() || [];
+          const match = products.find(p => p.itemId === itemId);
+          return match?.quality ?? 3;
+        },
+        getBestQuality: (itemId: string) => {
+          const products = inventory.value?.getProducts() || [];
+          const matches = products.filter(p => p.itemId === itemId);
+          if (matches.length === 0) return 3 as QualityGrade;
+          return Math.max(...matches.map(m => m.quality)) as QualityGrade;
+        }
+      });
+      festivalGift.value.setRewardAccess({
+        addCoins: (amount: number) => {
+          if (shop.value) {
+            shop.value.addCoins(amount);
+            if (gameState.value) gameState.value.coins = shop.value.getCoins();
+          }
+        },
+        addReputation: (amount: number) => {
+          if (orders.value) {
+            orders.value.addReputation(amount);
+            if (gameState.value) gameState.value.reputation = orders.value.getReputation();
+          }
+        },
+        addItem: (itemId: string, quantity: number, quality?: QualityGrade) => {
+          return inventory.value?.addItem(itemId, quantity, quality) ?? false;
+        }
+      });
+      festivalGift.value.setStatisticsAccess({
+        recordFestivalGiftGiven: (villagerId: string, itemId: string, festivalId: FestivalType) => statistics.value?.recordFestivalGiftGiven(villagerId, itemId, festivalId),
+        recordFestivalOrderCompleted: (villagerId: string, orderId: string) => statistics.value?.recordFestivalOrderCompleted(villagerId, orderId),
+        recordFestivalDialogueCompleted: (villagerId: string, festivalId: FestivalType) => statistics.value?.recordFestivalDialogueCompleted(villagerId, festivalId),
+        recordFestivalParticipated: () => statistics.value?.recordFestivalParticipated(),
+        recordAffinityGained: (amount: number) => statistics.value?.recordAffinityGained(amount)
+      });
+      const festivalResult = festivalGift.value.checkAndStartFestival(gameState.value.season, gameState.value.day);
+      if (festivalResult) {
+        const festConfig = FESTIVALS[festivalResult];
+        addNotification(`${festConfig.icon} ${festConfig.name}到了！${festConfig.description}`, 'success');
+      }
 
       if (cropGrowth.value) {
         cropGrowth.value.setSkillAccess(combinedBonusAccess);
@@ -752,6 +811,57 @@ export const useGameStore = defineStore('game', () => {
       cropInsurance.value.setBuildingsAccess(buildings.value);
       cropInsurance.value.setSkillAccess(combinedBonusAccess);
       cropInsurance.value.setCurrentSeason(newGame.state.season);
+
+      festivalGift.value = new FestivalGift(newGame.festivalGift ?? null);
+      festivalGift.value.setVillagerAccess({
+        getStage: (villagerId: string) => villagerRelations.value?.getStage(villagerId) ?? 0,
+        getAffinity: (villagerId: string) => villagerRelations.value?.getAffinity(villagerId) ?? 0,
+        addAffinity: (villagerId: string, amount: number) => villagerRelations.value?.addAffinity(villagerId, amount) ?? { stageAdvanced: false, newStage: 0, stageCodexTriggers: [], stageAchievementTriggers: [] }
+      });
+      festivalGift.value.setInventoryAccess({
+        hasItem: (itemId: string, quantity: number, minQuality?: QualityGrade) => inventory.value?.hasItem(itemId, quantity, minQuality) ?? false,
+        removeItem: (itemId: string, quantity: number, quality?: QualityGrade) => inventory.value?.removeItem(itemId, quantity, quality) ?? false,
+        getItemQuality: (itemId: string) => {
+          const products = inventory.value?.getProducts() || [];
+          const match = products.find(p => p.itemId === itemId);
+          return match?.quality ?? 3;
+        },
+        getBestQuality: (itemId: string) => {
+          const products = inventory.value?.getProducts() || [];
+          const matches = products.filter(p => p.itemId === itemId);
+          if (matches.length === 0) return 3 as QualityGrade;
+          return Math.max(...matches.map(m => m.quality)) as QualityGrade;
+        }
+      });
+      festivalGift.value.setRewardAccess({
+        addCoins: (amount: number) => {
+          if (shop.value) {
+            shop.value.addCoins(amount);
+            if (gameState.value) gameState.value.coins = shop.value.getCoins();
+          }
+        },
+        addReputation: (amount: number) => {
+          if (orders.value) {
+            orders.value.addReputation(amount);
+            if (gameState.value) gameState.value.reputation = orders.value.getReputation();
+          }
+        },
+        addItem: (itemId: string, quantity: number, quality?: QualityGrade) => {
+          return inventory.value?.addItem(itemId, quantity, quality) ?? false;
+        }
+      });
+      festivalGift.value.setStatisticsAccess({
+        recordFestivalGiftGiven: (villagerId: string, itemId: string, festivalId: FestivalType) => statistics.value?.recordFestivalGiftGiven(villagerId, itemId, festivalId),
+        recordFestivalOrderCompleted: (villagerId: string, orderId: string) => statistics.value?.recordFestivalOrderCompleted(villagerId, orderId),
+        recordFestivalDialogueCompleted: (villagerId: string, festivalId: FestivalType) => statistics.value?.recordFestivalDialogueCompleted(villagerId, festivalId),
+        recordFestivalParticipated: () => statistics.value?.recordFestivalParticipated(),
+        recordAffinityGained: (amount: number) => statistics.value?.recordAffinityGained(amount)
+      });
+      const festivalResult = festivalGift.value.checkAndStartFestival(newGame.state.season, newGame.state.day);
+      if (festivalResult) {
+        const festConfig = FESTIVALS[festivalResult];
+        addNotification(`${festConfig.icon} ${festConfig.name}到了！${festConfig.description}`, 'success');
+      }
 
       if (cropGrowth.value) {
         cropGrowth.value.setSkillAccess(combinedBonusAccess);
@@ -1156,6 +1266,7 @@ export const useGameStore = defineStore('game', () => {
     const rawFarmHire = farmHire.value ? JSON.parse(JSON.stringify(toRaw(farmHire.value.getState()))) : undefined;
     const rawAuction = auction.value ? JSON.parse(JSON.stringify(toRaw(auction.value.getState()))) : undefined;
     const rawCropInsurance = cropInsurance.value ? JSON.parse(JSON.stringify(toRaw(cropInsurance.value.getState()))) : undefined;
+    const rawFestivalGift = festivalGift.value ? JSON.parse(JSON.stringify(toRaw(festivalGift.value.getState()))) : undefined;
 
     await gameDB.saveCompleteGame(
       rawState,
@@ -1172,7 +1283,8 @@ export const useGameStore = defineStore('game', () => {
       rawVillagerRelations,
       rawFarmHire,
       rawAuction,
-      rawCropInsurance
+      rawCropInsurance,
+      rawFestivalGift
     );
   }
 
@@ -2525,6 +2637,59 @@ export const useGameStore = defineStore('game', () => {
     return villagerRelations.value?.resetVillagerDialogue(villagerId) ?? false;
   }
 
+  function giveFestivalGiftToVillager(villagerId: string, itemId: string, quality: QualityGrade): FestivalGiftResult {
+    if (!festivalGift.value) {
+      return { success: false, message: '系统未初始化', affinityDelta: 0, isFavorite: false, isDisliked: false, qualityBonus: 0, stageAdvanced: false, newStage: 0, unlockedOrders: [], unlockedDialogues: [], codexTriggers: [], achievementTriggers: [] };
+    }
+    const result = festivalGift.value.giveFestivalGift(villagerId, itemId, quality);
+    if (result.success) {
+      const detail = getVillagerDetail(villagerId);
+      if (result.isFavorite) {
+        addNotification(`🎊 ${detail?.name || '村民'}在节日里非常喜欢这份礼物！好感度 +${result.affinityDelta}`, 'success');
+      } else if (result.isDisliked) {
+        addNotification(`😞 ${detail?.name || '村民'}在节日里不太喜欢这个...好感度 ${result.affinityDelta}`, 'error');
+      } else {
+        addNotification(`🎁 ${detail?.name || '村民'}在节日收下了礼物。好感度 +${result.affinityDelta}`, 'info');
+      }
+      if (result.stageAdvanced) {
+        addNotification(`💖 与${detail?.name || '村民'}好感度提升！`, 'success');
+      }
+      for (const orderId of result.unlockedOrders) {
+        addNotification(`📜 解锁节日专属订单！`, 'info');
+      }
+    }
+    checkAchievements();
+    saveGame();
+    return result;
+  }
+
+  function advanceFestivalDialogue(villagerId: string, choiceIndex?: number) {
+    if (!festivalGift.value) return null;
+    const result = festivalGift.value.advanceFestivalDialogue(villagerId, choiceIndex);
+    if (result.affinityDelta > 0) {
+      addNotification(`💬 节日对话好感度 +${result.affinityDelta}`, 'info');
+    }
+    for (const orderId of result.unlockedOrders) {
+      addNotification(`📜 解锁节日专属订单！`, 'info');
+    }
+    checkAchievements();
+    saveGame();
+    return result;
+  }
+
+  function getCurrentFestivalDialogue(villagerId: string) {
+    return festivalGift.value?.getCurrentFestivalDialogue(villagerId) ?? null;
+  }
+
+  function checkFestivalStart() {
+    if (!festivalGift.value || !gameState.value) return;
+    const result = festivalGift.value.checkAndStartFestival(gameState.value.season, gameState.value.day);
+    if (result) {
+      const festConfig = FESTIVALS[result];
+      addNotification(`${festConfig.icon} ${festConfig.name}到了！${festConfig.description}`, 'success');
+    }
+  }
+
   function openHireWorkerPanel() {
     showHireWorker.value = true;
   }
@@ -2917,6 +3082,15 @@ export const useGameStore = defineStore('game', () => {
     insuranceStats,
     toggleInsuranceModal,
     subscribeToInsurance,
-    cancelInsurance
+    cancelInsurance,
+    festivalGift,
+    festivalGiftState,
+    isFestivalActive,
+    currentFestivalInfo,
+    currentFestival,
+    giveFestivalGiftToVillager,
+    advanceFestivalDialogue,
+    getCurrentFestivalDialogue,
+    checkFestivalStart
   };
 });

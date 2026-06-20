@@ -93,7 +93,11 @@ export const INITIAL_STATS: GameStats = {
   exclusiveOrdersCompleted: 0,
   giftsGivenToVillagers: 0,
   ordersCompletedForVillagers: {},
-  villagerStorylinesCompleted: 0
+  villagerStorylinesCompleted: 0,
+  festivalGiftsGiven: 0,
+  festivalOrdersCompleted: 0,
+  festivalDialoguesCompleted: 0,
+  festivalsParticipated: 0
 };
 
 export type StatEventType =
@@ -140,7 +144,11 @@ export type StatEventType =
   | 'exclusive_order_completed'
   | 'gift_given'
   | 'order_completed_for_villager'
-  | 'villager_storyline_completed';
+  | 'villager_storyline_completed'
+  | 'festival_gift_given'
+  | 'festival_order_completed'
+  | 'festival_dialogue_completed'
+  | 'festival_participated';
 
 export interface StatEvent {
   type: StatEventType;
@@ -545,5 +553,25 @@ export class Statistics {
     const expGain = this.addSkillExperience('villager_storyline_completed', 1);
     this.notify(this.createEvent('villager_storyline_completed', { villagerId, expGain }));
     return expGain;
+  }
+
+  recordFestivalGiftGiven(villagerId: string, itemId: string, festivalId: string) {
+    this.stats.festivalGiftsGiven += 1;
+    this.notify(this.createEvent('festival_gift_given', { villagerId, itemId, festivalId }));
+  }
+
+  recordFestivalOrderCompleted(villagerId: string, orderId: string) {
+    this.stats.festivalOrdersCompleted += 1;
+    this.notify(this.createEvent('festival_order_completed', { villagerId, orderId }));
+  }
+
+  recordFestivalDialogueCompleted(villagerId: string, festivalId: string) {
+    this.stats.festivalDialoguesCompleted += 1;
+    this.notify(this.createEvent('festival_dialogue_completed', { villagerId, festivalId }));
+  }
+
+  recordFestivalParticipated() {
+    this.stats.festivalsParticipated += 1;
+    this.notify(this.createEvent('festival_participated', {}));
   }
 }

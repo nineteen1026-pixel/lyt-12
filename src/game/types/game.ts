@@ -314,6 +314,10 @@ export interface GameStats {
   giftsGivenToVillagers: number;
   ordersCompletedForVillagers: Record<string, number>;
   villagerStorylinesCompleted: number;
+  festivalGiftsGiven: number;
+  festivalOrdersCompleted: number;
+  festivalDialoguesCompleted: number;
+  festivalsParticipated: number;
 }
 
 export interface AchievementState {
@@ -876,3 +880,99 @@ export interface InsurancePayoutResult {
   cropsByQuality: Record<QualityGrade, number>;
   breakdown: Array<{ quality: QualityGrade; count: number; payout: number }>;
 }
+
+export type FestivalType = 'spring_planting' | 'summer_solstice' | 'harvest' | 'winter_solstice';
+
+export interface FestivalConfig {
+  id: FestivalType;
+  name: string;
+  icon: string;
+  season: Season;
+  festivalDay: number;
+  description: string;
+  giftAffinityMultiplier: number;
+  qualityBonusAffinity: Record<QualityGrade, number>;
+}
+
+export interface FestivalVillagerPreference {
+  villagerId: string;
+  preferredItems: string[];
+  dislikedItems: string[];
+}
+
+export interface FestivalExclusiveOrder {
+  id: string;
+  villagerId: string;
+  festivalId: FestivalType;
+  unlockStage: AffinityStage;
+  name: string;
+  description: string;
+  items: OrderItem[];
+  reward: OrderReward;
+  deadlineDays: number;
+  oneTimeOnly: boolean;
+  priority: number;
+}
+
+export interface FestivalDialogueNode {
+  id: string;
+  festivalId: FestivalType;
+  villagerId: string;
+  stage: AffinityStage;
+  speaker: 'villager' | 'player' | 'narrator';
+  text: string;
+  choices?: DialogueChoice[];
+  autoNext?: string;
+  isEnding?: boolean;
+  unlockOrderId?: string;
+  unlockRewardId?: string;
+  triggerCodexId?: string;
+  triggerAchievementId?: string;
+}
+
+export interface FestivalGiftRecord {
+  villagerId: string;
+  festivalId: FestivalType;
+  itemId: string;
+  quality: QualityGrade;
+  affinityGained: number;
+  timestamp: number;
+}
+
+export interface FestivalGiftState {
+  id: string;
+  currentFestival: FestivalType | null;
+  festivalDay: number;
+  giftsGivenThisFestival: FestivalGiftRecord[];
+  completedFestivalOrders: string[];
+  unlockedFestivalOrders: string[];
+  completedFestivalDialogues: string[];
+  festivalsCompleted: number;
+  totalFestivalGiftsGiven: number;
+  lastFestivalDay: number;
+}
+
+export interface FestivalGiftResult {
+  success: boolean;
+  message: string;
+  affinityDelta: number;
+  isFavorite: boolean;
+  isDisliked: boolean;
+  qualityBonus: number;
+  stageAdvanced: boolean;
+  newStage: AffinityStage;
+  unlockedOrders: string[];
+  unlockedDialogues: string[];
+  codexTriggers: string[];
+  achievementTriggers: string[];
+}
+
+export const FESTIVAL_AFFINITY_GAIN = {
+  gift_festival_liked: 15,
+  gift_festival_normal: 5,
+  gift_festival_disliked: -8,
+  festival_order_completed: 25,
+  festival_dialogue_good: 10,
+  festival_dialogue_neutral: 4,
+  festival_dialogue_bad: -5
+};
