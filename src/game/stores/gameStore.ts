@@ -1932,7 +1932,37 @@ export const useGameStore = defineStore('game', () => {
 
     if (auction.value && mapGrid.value) {
       const dayOfWeek = ((mapGrid.value.getDay() - 1) % 7) + 1;
-      auction.value.checkAndUpdateAuction(dayOfWeek);
+      const auctionResult = auction.value.checkAndUpdateAuction(dayOfWeek);
+      
+      if (auctionResult.settledItems && auctionResult.settledItems.length > 0) {
+        for (const settled of auctionResult.settledItems) {
+          const repChange = settled.reputationImpact || 0;
+          const repText = repChange > 0 ? `⭐ 声望 +${repChange}` : repChange < 0 ? `💔 声望 ${repChange}` : '';
+          
+          if (settled.won) {
+            const parts = [`🎉 【离线拍卖】你以${settled.finalPrice}金币拍得【${settled.item.name}】`];
+            if (repText) parts.push(repText);
+            if (settled.rewards?.coins) parts.push(`💰 额外 +${settled.rewards.coins}金币`);
+            addNotification(parts.join(' | '), 'success');
+          } else {
+            const parts = [`😔 【离线拍卖】【${settled.item.name}】被别人拍走了，成交价${settled.finalPrice}金币`];
+            if (repText) parts.push(repText);
+            addNotification(parts.join(' | '), 'info');
+          }
+        }
+      }
+      
+      if (auctionResult.started) {
+        addNotification(`🎉 周末到啦！集市拍卖会开始了！`, 'info');
+      }
+      
+      if (auctionResult.ended) {
+        addNotification('🏁 今日拍卖会已结束', 'info');
+      }
+      
+      if (auctionResult.started || auctionResult.ended || (auctionResult.settledItems && auctionResult.settledItems.length > 0)) {
+        saveGame();
+      }
     }
   }
 

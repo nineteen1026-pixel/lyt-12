@@ -300,8 +300,12 @@ export class AuctionSystem {
       const baseRepLoss = AUCTION_REPUTATION_PENALTY_BASE;
       const priceBonusLoss = Math.floor(baseRepLoss * priceFactor * 0.3);
       const totalRepLoss = baseRepLoss + priceBonusLoss;
-      this.reputationAccess.addReputation(-totalRepLoss);
-      reputationImpact = -totalRepLoss;
+      const currentRep = this.reputationAccess.getReputationScore();
+      const actualLoss = Math.min(totalRepLoss, currentRep);
+      if (actualLoss > 0) {
+        this.reputationAccess.addReputation(-actualLoss);
+      }
+      reputationImpact = -actualLoss;
     }
 
     return {
