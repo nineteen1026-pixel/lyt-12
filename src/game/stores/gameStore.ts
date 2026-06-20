@@ -2395,10 +2395,18 @@ export const useGameStore = defineStore('game', () => {
     if (!auction.value) return null;
     const result = auction.value.settleCurrentItem();
     if (result) {
+      const repChange = result.reputationImpact || 0;
+      const repText = repChange > 0 ? `⭐ 声望 +${repChange}` : repChange < 0 ? `💔 声望 ${repChange}` : '';
+      
       if (result.won) {
-        addNotification(`🎉 恭喜！你以${result.finalPrice}金币拍得【${result.item.name}】`, 'success');
+        const parts = [`🎉 恭喜！你以${result.finalPrice}金币拍得【${result.item.name}】`];
+        if (repText) parts.push(repText);
+        if (result.rewards?.coins) parts.push(`💰 额外 +${result.rewards.coins}金币`);
+        addNotification(parts.join(' | '), 'success');
       } else {
-        addNotification(`😔 【${result.item.name}】被别人拍走了，成交价${result.finalPrice}金币`, 'info');
+        const parts = [`😔 【${result.item.name}】被别人拍走了，成交价${result.finalPrice}金币`];
+        if (repText) parts.push(repText);
+        addNotification(parts.join(' | '), 'info');
       }
       saveGame();
     }

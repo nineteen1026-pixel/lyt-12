@@ -242,6 +242,8 @@ export class AuctionSystem {
     let economicImpact = 0;
     let reputationImpact = 0;
 
+    const priceFactor = Math.min(finalPrice / 1000, 2);
+
     if (won) {
       this.state.totalAuctionsWon++;
       this.state.totalCoinsSpent += finalPrice;
@@ -265,12 +267,12 @@ export class AuctionSystem {
         rewards.coins = adjustedCoins;
       }
 
-      if (currentItem.bonusReputation) {
-        const repGain = currentItem.bonusReputation + AUCTION_REPUTATION_BONUS_BASE;
-        this.reputationAccess.addReputation(repGain);
-        rewards.reputation = repGain;
-        reputationImpact = repGain;
-      }
+      const baseRepGain = (currentItem.bonusReputation || 0) + AUCTION_REPUTATION_BONUS_BASE;
+      const priceBonusRep = Math.floor(baseRepGain * priceFactor * 0.5);
+      const totalRepGain = baseRepGain + priceBonusRep;
+      this.reputationAccess.addReputation(totalRepGain);
+      rewards.reputation = totalRepGain;
+      reputationImpact = totalRepGain;
 
       if (currentItem.bonusAffinity && this.villagerAccess) {
         const affinityResults: Array<{ villagerId: string; amount: number }> = [];
@@ -295,8 +297,11 @@ export class AuctionSystem {
       economicImpact = this.calculateEconomicImpact(finalPrice, false);
       this.updateEconomicBalance(economicImpact);
 
-      const repLoss = Math.floor(AUCTION_REPUTATION_PENALTY_BASE * 0.5);
-      reputationImpact = -repLoss;
+      const baseRepLoss = AUCTION_REPUTATION_PENALTY_BASE;
+      const priceBonusLoss = Math.floor(baseRepLoss * priceFactor * 0.3);
+      const totalRepLoss = baseRepLoss + priceBonusLoss;
+      this.reputationAccess.addReputation(-totalRepLoss);
+      reputationImpact = -totalRepLoss;
     }
 
     return {
