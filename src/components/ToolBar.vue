@@ -158,6 +158,21 @@ const toggleBuildingsPanel = () => {
       <span class="font-pixel text-[8px] text-farm-wood-dark mt-1">建造</span>
     </div>
 
+    <div 
+      class="tool-btn flex flex-col items-center justify-center w-16 h-16 bg-farm-ui-dark border-3 border-farm-wood-dark cursor-pointer transition-all hover:bg-farm-gold hover:scale-105 active:scale-95 relative"
+      :class="{ 'bg-farm-gold shadow-pixel-inset': gameStore.showInsurance }"
+      @click="gameStore.toggleInsuranceModal?.()"
+    >
+      <span class="text-2xl">🛡️</span>
+      <span class="font-pixel text-[8px] text-farm-wood-dark mt-1">保险</span>
+      <span 
+        v-if="gameStore.isInsured"
+        class="absolute -top-1 -right-1 w-5 h-5 bg-green-500 text-white font-pixel text-[10px] rounded-full flex items-center justify-center border-2 border-farm-wood-dark"
+      >
+        ✓
+      </span>
+    </div>
+
     <div class="w-px h-12 bg-farm-wood-dark mx-2"></div>
 
     <div 

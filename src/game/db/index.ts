@@ -1,6 +1,6 @@
 import { openDB, IDBPDatabase } from 'idb';
 import { DB_CONFIG, STORE_CONFIGS, INITIAL_GAME_STATE, INITIAL_REPUTATION, type DBStores } from './schema';
-import type { GameState, Plot, Animal, Pet, InventoryItem, Order, Building, GameStats, AchievementProgress, CodexEntry, SkillTreeState, VillagerRelationsState, FarmHireState, AuctionState } from '../types/game';
+import type { GameState, Plot, Animal, Pet, InventoryItem, Order, Building, GameStats, AchievementProgress, CodexEntry, SkillTreeState, VillagerRelationsState, FarmHireState, AuctionState, InsuranceState } from '../types/game';
 import { GRID_WIDTH, GRID_HEIGHT, INITIAL_UNLOCKED } from '../types/game';
 import { INITIAL_STATS } from '../modules/Statistics';
 import { INITIAL_SKILL_TREE_STATE } from '../modules/SkillTree';
@@ -336,6 +336,22 @@ class GameDatabase {
     }
   }
 
+  async saveCropInsurance(insurance: InsuranceState): Promise<void> {
+    const db = this.ensureDB();
+    const clone = JSON.parse(JSON.stringify(insurance));
+    clone.id = 'main';
+    await db.put('cropInsurance', clone);
+  }
+
+  async getCropInsurance(): Promise<InsuranceState | undefined> {
+    const db = this.ensureDB();
+    try {
+      return await db.get('cropInsurance', 'main');
+    } catch (e) {
+      return undefined;
+    }
+  }
+
   async initializeNewGame(): Promise<{
     state: GameState;
     plots: Plot[];
@@ -351,6 +367,7 @@ class GameDatabase {
     villagerRelations: VillagerRelationsState;
     farmHire: FarmHireState;
     auction: AuctionState;
+    cropInsurance: InsuranceState;
   }> {
     const now = Date.now();
     const state: GameState = {
@@ -418,6 +435,17 @@ class GameDatabase {
     const villagerRelations: VillagerRelationsState = createInitialVillagerRelations();
     const farmHire: FarmHireState = createInitialFarmHireState();
     const auction: AuctionState = createInitialAuctionState();
+    const cropInsurance: InsuranceState = {
+      id: 'main',
+      activePlan: null,
+      insuredSince: null,
+      totalPremiumsPaid: 0,
+      totalClaimsPaid: 0,
+      claimsCount: 0,
+      lastPremiumDay: 0,
+      pendingClaim: null,
+      claimHistory: []
+    };
 
     await this.saveGameState(state);
     await this.saveAllPlots(plots);
@@ -433,8 +461,9 @@ class GameDatabase {
     await this.saveVillagerRelations(villagerRelations);
     await this.saveFarmHire(farmHire);
     await this.saveAuction(auction);
+    await this.saveCropInsurance(cropInsurance);
 
-    return { state, plots, animals, pets, inventory, orders, buildings, stats, achievements, codex, skillTree, villagerRelations, farmHire, auction };
+    return { state, plots, animals, pets, inventory, orders, buildings, stats, achievements, codex, skillTree, villagerRelations, farmHire, auction, cropInsurance };
   }
 
   async loadGame(): Promise<{
@@ -452,6 +481,7 @@ class GameDatabase {
     villagerRelations?: VillagerRelationsState;
     farmHire?: FarmHireState;
     auction?: AuctionState;
+    cropInsurance?: InsuranceState;
   } | null> {
     const state = await this.getGameState();
     if (!state) {
@@ -502,8 +532,9 @@ class GameDatabase {
     const villagerRelations = await this.getVillagerRelations();
     const farmHire = await this.getFarmHire();
     const auction = await this.getAuction();
+    const cropInsurance = await this.getCropInsurance();
 
-    return { state, plots, animals, pets, inventory, orders, buildings, stats, achievements, codex, skillTree, villagerRelations, farmHire, auction };
+    return { state, plots, animals, pets, inventory, orders, buildings, stats, achievements, codex, skillTree, villagerRelations, farmHire, auction, cropInsurance };
   }
 
   async saveCompleteGame(
@@ -520,7 +551,8 @@ class GameDatabase {
     skillTree?: SkillTreeState,
     villagerRelations?: VillagerRelationsState,
     farmHire?: FarmHireState,
-    auction?: AuctionState
+    auction?: AuctionState,
+    cropInsurance?: InsuranceState
   ): Promise<void> {
     await this.saveGameState(state);
     await this.saveAllPlots(plots);
@@ -550,6 +582,9 @@ class GameDatabase {
     }
     if (auction) {
       await this.saveAuction(auction);
+    }
+    if (cropInsurance) {
+      await this.saveCropInsurance(cropInsurance);
     }
   }
 

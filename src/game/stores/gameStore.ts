@@ -21,6 +21,8 @@ import { getQualitySellPrice, getQualityStars } from '../modules/Quality';
 import { VillagerRelations, type DialogueAdvanceResult } from '../modules/VillagerRelations';
 import { FarmHire, createInitialFarmHireState } from '../modules/FarmHire';
 import { AuctionSystem } from '../modules/Auction';
+import { CropInsurance } from '../modules/CropInsurance';
+import type { InsurancePlanType, InsuranceState, InsurancePayoutResult } from '../types/game';
 import { gameDB } from '../db';
 import { getItem } from '../data/items';
 import { getCropConfig } from '../data/crops';
@@ -36,6 +38,7 @@ import { createMineSession, generateMineFloor, canMoveTo, getStaminaCost, isAdja
 import { getExclusiveOrderById, getVillagerDetail, STAGE_NAMES, STAGE_COLORS } from '../data/villagers';
 import { getMaxHireSlots, TASK_DESCRIPTIONS, TASK_ICONS } from '../data/farmWorkers';
 import { getAuctionRarityName } from '../data/auction';
+import { getInsurancePlan, getUnlockedInsurancePlans } from '../data/insurance';
 
 export const useGameStore = defineStore('game', () => {
   const gameState = ref<GameState | null>(null);
@@ -55,6 +58,8 @@ export const useGameStore = defineStore('game', () => {
   const villagerRelations = ref<VillagerRelations | null>(null);
   const farmHire = ref<FarmHire | null>(null);
   const auction = ref<AuctionSystem | null>(null);
+  const cropInsurance = ref<CropInsurance | null>(null);
+  const showInsurance = ref(false);
   const selectedTool = ref<ToolType>(null);
   const selectedSeed = ref<string | null>(null);
   const selectedBuilding = ref<BuildingType | null>(null);
@@ -144,6 +149,11 @@ export const useGameStore = defineStore('game', () => {
   const farmHireAvailableSlots = computed(() => farmHire.value?.getAvailableSlots() ?? 0);
   const farmHireTotalDailyWage = computed(() => farmHire.value?.getTotalDailyWage() ?? 0);
   const farmHireActiveSlots = computed(() => farmHire.value?.getActiveSlots() ?? []);
+
+  const insuranceState = computed<InsuranceState | null>(() => cropInsurance.value?.getState() ?? null);
+  const isInsured = computed(() => cropInsurance.value?.isInsured() ?? false);
+  const activeInsurancePlan = computed<InsurancePlanType | null>(() => cropInsurance.value?.getActivePlan() ?? null);
+  const insuranceStats = computed(() => cropInsurance.value?.getStats() ?? null);
 
   const combinedBonusAccess = {
     getSkillBonus: (): SkillEffectBonus => {
@@ -359,6 +369,32 @@ export const useGameStore = defineStore('game', () => {
         auctionVillagerAccess_saved
       );
 
+      const insuranceCoinAccess_saved = {
+        getCoins: () => shop.value?.getCoins() ?? 0,
+        spendCoins: (amount: number) => {
+          if (shop.value && shop.value.getCoins() >= amount) {
+            shop.value.spendCoins(amount);
+            if (gameState.value) gameState.value.coins = shop.value.getCoins();
+            return true;
+          }
+          return false;
+        },
+        addCoins: (amount: number) => {
+          if (shop.value) {
+            shop.value.addCoins(amount);
+            if (gameState.value) gameState.value.coins = shop.value.getCoins();
+          }
+        }
+      };
+
+      cropInsurance.value = new CropInsurance(
+        savedGame.cropInsurance ?? null,
+        insuranceCoinAccess_saved
+      );
+      cropInsurance.value.setBuildingsAccess(buildings.value);
+      cropInsurance.value.setSkillAccess(combinedBonusAccess);
+      cropInsurance.value.setCurrentSeason(savedGame.state.season);
+
       if (cropGrowth.value) {
         cropGrowth.value.setSkillAccess(combinedBonusAccess);
       }
@@ -401,6 +437,8 @@ export const useGameStore = defineStore('game', () => {
 
         const weatherHistoryResult = processOfflineWeatherWithHistory(offlineMs, now);
         if (weatherHistoryResult.history.length > 0) {
+          const cropSnapshot = takeCropSnapshot();
+          
           const weatherEffects = weather.value.applyWeatherHistory(
             mapGrid.value.getPlotGrid(),
             weatherHistoryResult.history,
@@ -413,6 +451,22 @@ export const useGameStore = defineStore('game', () => {
             const w = weatherHistoryResult.history[i];
             const sev = weatherHistoryResult.severities[i] ?? 'normal';
             recordDisasterStats(w, sev, weatherEffects);
+          }
+          
+          if (weatherEffects.totalCropsLost > 0 && cropInsurance.value) {
+            const lostCrops = findLostCrops(cropSnapshot);
+            if (lostCrops.length > 0) {
+              const lastWeather = weatherHistoryResult.history[weatherHistoryResult.history.length - 1];
+              const lastSeverity = weatherHistoryResult.severities[weatherHistoryResult.severities.length - 1] ?? 'normal';
+              processInsuranceClaim(lastWeather, lastSeverity, lostCrops, mapGrid.value.getDay());
+            }
+          }
+        }
+        
+        if (cropInsurance.value && weatherHistoryResult.history.length > 0) {
+          const startDay = mapGrid.value.getDay() - weatherHistoryResult.history.length;
+          for (let i = 1; i <= weatherHistoryResult.history.length; i++) {
+            cropInsurance.value.chargeDailyPremium(startDay + i);
           }
         }
 
@@ -645,6 +699,32 @@ export const useGameStore = defineStore('game', () => {
         auctionReputationAccess_new,
         auctionVillagerAccess_new
       );
+
+      const insuranceCoinAccess_new = {
+        getCoins: () => shop.value?.getCoins() ?? 0,
+        spendCoins: (amount: number) => {
+          if (shop.value && shop.value.getCoins() >= amount) {
+            shop.value.spendCoins(amount);
+            if (gameState.value) gameState.value.coins = shop.value.getCoins();
+            return true;
+          }
+          return false;
+        },
+        addCoins: (amount: number) => {
+          if (shop.value) {
+            shop.value.addCoins(amount);
+            if (gameState.value) gameState.value.coins = shop.value.getCoins();
+          }
+        }
+      };
+
+      cropInsurance.value = new CropInsurance(
+        newGame.cropInsurance ?? null,
+        insuranceCoinAccess_new
+      );
+      cropInsurance.value.setBuildingsAccess(buildings.value);
+      cropInsurance.value.setSkillAccess(combinedBonusAccess);
+      cropInsurance.value.setCurrentSeason(newGame.state.season);
 
       if (cropGrowth.value) {
         cropGrowth.value.setSkillAccess(combinedBonusAccess);
@@ -901,6 +981,88 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
+  function takeCropSnapshot(): Array<{ x: number; y: number; cropType: string; waterCount: number; growthProgress: number; hasCrop: boolean }> {
+    if (!mapGrid.value || !cropGrowth.value) return [];
+
+    const plots = mapGrid.value.getPlotGrid();
+    const snapshot: Array<{ x: number; y: number; cropType: string; waterCount: number; growthProgress: number; hasCrop: boolean }> = [];
+
+    for (let y = 0; y < plots.length; y++) {
+      for (let x = 0; x < plots[y].length; x++) {
+        const plot = plots[y][x];
+        if (plot.unlocked && plot.crop) {
+          const growth = cropGrowth.value.calculateGrowth(plot.crop, Date.now());
+          snapshot.push({
+            x,
+            y,
+            cropType: plot.crop.type,
+            waterCount: plot.crop.waterCount || 0,
+            growthProgress: growth,
+            hasCrop: true
+          });
+        }
+      }
+    }
+
+    return snapshot;
+  }
+
+  function findLostCrops(
+    snapshot: Array<{ x: number; y: number; cropType: string; waterCount: number; growthProgress: number; hasCrop: boolean }>
+  ): Array<{ x: number; y: number; cropType: string; waterCount: number; growthProgress: number }> {
+    if (!mapGrid.value) return [];
+
+    const plots = mapGrid.value.getPlotGrid();
+    const lost: Array<{ x: number; y: number; cropType: string; waterCount: number; growthProgress: number }> = [];
+
+    for (const snap of snapshot) {
+      const plot = plots[snap.y]?.[snap.x];
+      if (!plot || !plot.crop) {
+        lost.push({
+          x: snap.x,
+          y: snap.y,
+          cropType: snap.cropType,
+          waterCount: snap.waterCount,
+          growthProgress: snap.growthProgress
+        });
+      }
+    }
+
+    return lost;
+  }
+
+  function processInsuranceClaim(
+    weather: WeatherType,
+    severity: WeatherSeverity,
+    lostCrops: Array<{ x: number; y: number; cropType: string; waterCount: number; growthProgress: number }>,
+    currentDay: number
+  ): InsurancePayoutResult | null {
+    if (!cropInsurance.value || !mapGrid.value || lostCrops.length === 0) return null;
+
+    const plots = mapGrid.value.getPlotGrid();
+    const result = cropInsurance.value.processClaim(
+      plots,
+      weather,
+      severity,
+      lostCrops,
+      currentDay
+    );
+
+    if (result.covered && result.totalPayout > 0) {
+      const planName = getInsurancePlan(result.plan!)?.name || '保险';
+      addNotification(
+        `🛡️ ${planName}理赔：+${result.totalPayout}金币（${result.cropsLost}株作物受损）`,
+        'success'
+      );
+      if (statistics.value) {
+        statistics.value.recordCoinsEarned(result.totalPayout);
+      }
+      checkAchievements();
+    }
+
+    return result;
+  }
+
   function notifyWeatherEffects(effects: WeatherEffects, isOffline: boolean = false) {
     const parts: string[] = [];
     if (effects.wateredPlots > 0) {
@@ -966,6 +1128,7 @@ export const useGameStore = defineStore('game', () => {
     const rawVillagerRelations = JSON.parse(JSON.stringify(toRaw(villagerRelations.value.getState())));
     const rawFarmHire = farmHire.value ? JSON.parse(JSON.stringify(toRaw(farmHire.value.getState()))) : undefined;
     const rawAuction = auction.value ? JSON.parse(JSON.stringify(toRaw(auction.value.getState()))) : undefined;
+    const rawCropInsurance = cropInsurance.value ? JSON.parse(JSON.stringify(toRaw(cropInsurance.value.getState()))) : undefined;
 
     await gameDB.saveCompleteGame(
       rawState,
@@ -981,7 +1144,8 @@ export const useGameStore = defineStore('game', () => {
       rawSkillTree,
       rawVillagerRelations,
       rawFarmHire,
-      rawAuction
+      rawAuction,
+      rawCropInsurance
     );
   }
 
@@ -1466,9 +1630,24 @@ export const useGameStore = defineStore('game', () => {
     if (weatherUpdate.changed && weatherUpdate.newWeather) {
       const sevLabel = weather.value.getSeverityName(weatherUpdate.newSeverity ?? 'normal');
       addNotification(`今日天气：${sevLabel}${weather.value.getWeatherName(weatherUpdate.newWeather)}！`, 'info');
+      
+      const cropSnapshot = takeCropSnapshot();
+      
       const effects = weather.value.applyWeatherEffects(mapGrid.value.getPlotGrid(), time);
       notifyWeatherEffects(effects, false);
       recordDisasterStats(weatherUpdate.newWeather, weatherUpdate.newSeverity ?? 'normal', effects);
+
+      if (effects.totalCropsLost > 0) {
+        const lostCrops = findLostCrops(cropSnapshot);
+        if (lostCrops.length > 0 && cropInsurance.value) {
+          processInsuranceClaim(
+            weatherUpdate.newWeather,
+            weatherUpdate.newSeverity ?? 'normal',
+            lostCrops,
+            currentDay
+          );
+        }
+      }
 
       if (statistics.value && weatherUpdate.newWeather === 'stormy') {
         statistics.value.recordStormOccurred();
@@ -1893,6 +2072,16 @@ export const useGameStore = defineStore('game', () => {
 
     dayOrdersCompleted.value = 0;
     dayOrdersTotal.value = orders.value.getActiveOrderCount();
+
+    if (cropInsurance.value && gameState.value) {
+      const currentDay = mapGrid.value.getDay();
+      const premiumResult = cropInsurance.value.chargeDailyPremium(currentDay);
+      if (premiumResult.charged && premiumResult.amount > 0) {
+        addNotification(`🛡️ 保险保费扣除：-${premiumResult.amount}金币`, 'info');
+      } else if (premiumResult.message) {
+        addNotification(premiumResult.message, 'error');
+      }
+    }
 
     const plots = mapGrid.value.getPlotGrid();
     let plantedCount = 0;
@@ -2366,6 +2555,33 @@ export const useGameStore = defineStore('game', () => {
     showAuction.value = false;
   }
 
+  function toggleInsuranceModal() {
+    showInsurance.value = !showInsurance.value;
+  }
+
+  function subscribeToInsurance(planId: InsurancePlanType): { success: boolean; message: string } {
+    if (!cropInsurance.value || !mapGrid.value) {
+      return { success: false, message: '系统未初始化' };
+    }
+    const currentDay = mapGrid.value.getDay();
+    const result = cropInsurance.value.subscribeToPlan(planId, currentDay);
+    if (result.success) {
+      saveGame();
+    }
+    return result;
+  }
+
+  function cancelInsurance(): { success: boolean; message: string } {
+    if (!cropInsurance.value) {
+      return { success: false, message: '系统未初始化' };
+    }
+    const result = cropInsurance.value.cancelSubscription();
+    if (result.success) {
+      saveGame();
+    }
+    return result;
+  }
+
   function toggleAuctionModal() {
     showAuction.value = !showAuction.value;
   }
@@ -2665,6 +2881,15 @@ export const useGameStore = defineStore('game', () => {
     getCurrentAuctionItem,
     getEconomicIndex,
     getAuctionHistory,
-    checkAndUpdateAuction
+    checkAndUpdateAuction,
+    cropInsurance,
+    showInsurance,
+    insuranceState,
+    isInsured,
+    activeInsurancePlan,
+    insuranceStats,
+    toggleInsuranceModal,
+    subscribeToInsurance,
+    cancelInsurance
   };
 });

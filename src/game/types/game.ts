@@ -830,3 +830,49 @@ export const AUCTION_ECONOMIC_BALANCE_MAX = 2.0;
 export const AUCTION_ECONOMIC_BALANCE_MIN = 0.5;
 export const AUCTION_REPUTATION_BONUS_BASE = 5;
 export const AUCTION_REPUTATION_PENALTY_BASE = 3;
+
+export type InsurancePlanType = 'basic' | 'standard' | 'comprehensive';
+
+export interface InsurancePlanConfig {
+  id: InsurancePlanType;
+  name: string;
+  description: string;
+  icon: string;
+  dailyPremium: number;
+  coveredWeathers: WeatherType[];
+  payoutMultiplier: number;
+  qualityBonus: number;
+  unlockPlotCount: number;
+}
+
+export interface InsuranceState {
+  id: string;
+  activePlan: InsurancePlanType | null;
+  insuredSince: number | null;
+  totalPremiumsPaid: number;
+  totalClaimsPaid: number;
+  claimsCount: number;
+  lastPremiumDay: number;
+  pendingClaim?: InsuranceClaim | null;
+  claimHistory: InsuranceClaim[];
+}
+
+export interface InsuranceClaim {
+  id: string;
+  weatherType: WeatherType;
+  weatherSeverity: WeatherSeverity;
+  cropsLost: number;
+  cropsByQuality: Record<QualityGrade, number>;
+  payout: number;
+  claimedAt: number;
+  day: number;
+}
+
+export interface InsurancePayoutResult {
+  plan: InsurancePlanType | null;
+  covered: boolean;
+  totalPayout: number;
+  cropsLost: number;
+  cropsByQuality: Record<QualityGrade, number>;
+  breakdown: Array<{ quality: QualityGrade; count: number; payout: number }>;
+}
