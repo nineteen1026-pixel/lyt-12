@@ -437,37 +437,64 @@ export const useGameStore = defineStore('game', () => {
 
         const weatherHistoryResult = processOfflineWeatherWithHistory(offlineMs, now);
         if (weatherHistoryResult.history.length > 0) {
-          const cropSnapshot = takeCropSnapshot();
+          const totalEffects: WeatherEffects = {
+            wateredPlots: 0,
+            frozenCrops: 0,
+            destroyedCrops: 0,
+            sprinklerWatered: 0,
+            greenhouseProtected: 0,
+            lightningRodProtected: 0,
+            heaterProtected: 0,
+            drainageProtected: 0,
+            witheredCrops: 0,
+            scorchedCrops: 0,
+            totalCropsLost: 0,
+            totalCropsSaved: 0,
+            severity: 'normal'
+          };
           
-          const weatherEffects = weather.value.applyWeatherHistory(
-            mapGrid.value.getPlotGrid(),
-            weatherHistoryResult.history,
-            weatherHistoryResult.severities,
-            savedGame.state.lastSaveTime,
-            now
-          );
-          notifyWeatherEffects(weatherEffects, true);
+          const originalWeather = weather.value.getState().current;
+          const originalSeverity = weather.value.getState().currentSeverity;
+          const interval = (now - savedGame.state.lastSaveTime) / weatherHistoryResult.history.length;
+          const startDay = mapGrid.value.getDay() - weatherHistoryResult.history.length;
+          
           for (let i = 0; i < weatherHistoryResult.history.length; i++) {
             const w = weatherHistoryResult.history[i];
             const sev = weatherHistoryResult.severities[i] ?? 'normal';
-            recordDisasterStats(w, sev, weatherEffects);
-          }
-          
-          if (weatherEffects.totalCropsLost > 0 && cropInsurance.value) {
-            const lostCrops = findLostCrops(cropSnapshot);
-            if (lostCrops.length > 0) {
-              const lastWeather = weatherHistoryResult.history[weatherHistoryResult.history.length - 1];
-              const lastSeverity = weatherHistoryResult.severities[weatherHistoryResult.severities.length - 1] ?? 'normal';
-              processInsuranceClaim(lastWeather, lastSeverity, lostCrops, mapGrid.value.getDay());
+            const simulatedTime = savedGame.state.lastSaveTime + (i + 1) * interval;
+            const currentDay = startDay + i + 1;
+            
+            weather.value.getState().current = w;
+            weather.value.getState().currentSeverity = sev;
+            
+            const cropSnapshot = takeCropSnapshot();
+            
+            const effects = weather.value.applyWeatherEffects(mapGrid.value.getPlotGrid(), simulatedTime);
+            
+            for (const key in effects) {
+              if (key !== 'severity' && typeof effects[key as keyof WeatherEffects] === 'number') {
+                (totalEffects as any)[key] += effects[key as keyof WeatherEffects] as number;
+              }
+            }
+            
+            recordDisasterStats(w, sev, effects);
+            
+            if (effects.totalCropsLost > 0 && cropInsurance.value) {
+              const lostCrops = findLostCrops(cropSnapshot);
+              if (lostCrops.length > 0) {
+                processInsuranceClaim(w, sev, lostCrops, currentDay);
+              }
+            }
+            
+            if (cropInsurance.value) {
+              cropInsurance.value.chargeDailyPremium(currentDay);
             }
           }
-        }
-        
-        if (cropInsurance.value && weatherHistoryResult.history.length > 0) {
-          const startDay = mapGrid.value.getDay() - weatherHistoryResult.history.length;
-          for (let i = 1; i <= weatherHistoryResult.history.length; i++) {
-            cropInsurance.value.chargeDailyPremium(startDay + i);
-          }
+          
+          weather.value.getState().current = originalWeather;
+          weather.value.getState().currentSeverity = originalSeverity;
+          
+          notifyWeatherEffects(totalEffects, true);
         }
 
         const cropUpdates = cropGrowth.value.processOfflineGrowth(offlineMs, now);
